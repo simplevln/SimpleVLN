@@ -1,0 +1,2 @@
+# Install in a separate server environment.
+vllm==0.18.0

@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+/.venv/
+/.env
+/logs/
+/results/
+/data/vln_data/scene_datasets/
