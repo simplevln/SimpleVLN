@@ -77,9 +77,9 @@ SimpleVLN models use the following backbones:
 
 | Backbone | Before RL | After RL |
 |---|---|---|
-| Qwen2.5-VL | 3B, 7B | — |
-| Qwen3-VL | 4B, 8B | 4B, 8B |
-| Qwen3.5 | 4B, 9B | 4B, 9B |
+| Qwen2.5-VL | [3B](https://huggingface.co/honglyhly/SimpleVLN_Qwen25VL_3B_SFT) · [7B](https://huggingface.co/honglyhly/SimpleVLN_Qwen25VL_7B_SFT) | — |
+| Qwen3-VL | [4B](https://huggingface.co/honglyhly/SimpleVLN_Qwen3VL_4B_SFT) · [8B](https://huggingface.co/honglyhly/SimpleVLN_Qwen3VL_8B_SFT) | [4B](https://huggingface.co/honglyhly/SimpleVLN_Qwen3VL_4B_RL) · [8B](https://huggingface.co/honglyhly/SimpleVLN_Qwen3VL_8B_RL) |
+| Qwen3.5 | [4B](https://huggingface.co/honglyhly/SimpleVLN_Qwen35_4B_SFT) · [9B](https://huggingface.co/honglyhly/SimpleVLN_Qwen35_9B_SFT) | [4B](https://huggingface.co/honglyhly/SimpleVLN_Qwen35_4B_RL) · [9B](https://huggingface.co/honglyhly/SimpleVLN_Qwen35_9B_RL) |
 
 <a id="results"></a>
 
@@ -193,10 +193,10 @@ Benchmark sources, attribution, and data terms are documented in the
 If you find SimpleVLN useful in your research, please cite:
 
 ```bibtex
-@misc{simplevln2026,
-  title  = {{SimpleVLN}: Towards Simple and Frontier Vision-Language Navigation With Native {MLLMs}},
-  author = {TODO},
-  year   = {2026},
-  note   = {TODO: publication details}
+@article{hong2027simplevln,
+  title   = {SimpleVLN: Towards Simple and Frontier Vision-Language Navigation},
+  author  = {Hong, Lingyi and Cai, Weiren and Chen, Jiayu and Zhou, Xinyu and He, Bailin and Guo, Yunfei and Sun, Qiao and Liu, Xiang and Ma, Boyu and Yang, Jianfei and Zhang, Wenqiang},
+  year    = {2027},
+  url     = {https://github.com/simplevln/SimpleVLN}
 }
 ```
