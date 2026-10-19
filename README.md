@@ -3,9 +3,10 @@
 </h1>
 
 <p align="center">
-  <a href="#models"><img src="https://img.shields.io/badge/Models-SimpleVLN-purple" alt="SimpleVLN Models"></a>
+  <a href="https://arxiv.org/abs/2610.23203"><img src="https://img.shields.io/badge/arXiv-2610.23203-red" alt="arXiv"></a>
+  <a href="https://github.com/simplevln/SimpleVLN"><img src="https://img.shields.io/badge/GitHub-SimpleVLN-black?logo=github" alt="GitHub"></a>
+  <a href="https://huggingface.co/collections/honglyhly/simplevln-6acd0780a8641f3c2b80fbd3"><img src="https://img.shields.io/badge/Models-SimpleVLN-purple" alt="SimpleVLN Models"></a>
   <a href="#results"><img src="https://img.shields.io/badge/Results-Benchmarks-green" alt="Benchmark Results"></a>
-  <a href="#evaluation"><img src="https://img.shields.io/badge/Code-Evaluation-blue?logo=github" alt="Evaluation"></a>
   <a href="#data"><img src="https://img.shields.io/badge/Data-R2R--CE%20%26%20RxR--CE-orange" alt="Evaluation Data"></a>
 </p>
 
@@ -197,6 +198,9 @@ If you find SimpleVLN useful in your research, please cite:
   title   = {SimpleVLN: Towards Simple and Frontier Vision-Language Navigation},
   author  = {Hong, Lingyi and Cai, Weiren and Chen, Jiayu and Zhou, Xinyu and He, Bailin and Guo, Yunfei and Sun, Qiao and Liu, Xiang and Ma, Boyu and Yang, Jianfei and Zhang, Wenqiang},
   year    = {2027},
-  url     = {https://github.com/simplevln/SimpleVLN}
+  eprint  = {2610.23203},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.RO},
+  url     = {https://arxiv.org/abs/2610.23203}
 }
 ```
