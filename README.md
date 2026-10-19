@@ -3,11 +3,11 @@
 </h1>
 
 <p align="center">
+  <a href="https://simplevln.github.io/"><img src="https://img.shields.io/badge/Homepage-SimpleVLN-blue" alt="Homepage"></a>
   <a href="https://arxiv.org/abs/2610.23203"><img src="https://img.shields.io/badge/arXiv-2610.23203-red" alt="arXiv"></a>
   <a href="https://github.com/simplevln/SimpleVLN"><img src="https://img.shields.io/badge/GitHub-SimpleVLN-black?logo=github" alt="GitHub"></a>
   <a href="https://huggingface.co/collections/honglyhly/simplevln-6acd0780a8641f3c2b80fbd3"><img src="https://img.shields.io/badge/Models-SimpleVLN-purple" alt="SimpleVLN Models"></a>
   <a href="#results"><img src="https://img.shields.io/badge/Results-Benchmarks-green" alt="Benchmark Results"></a>
-  <a href="#data"><img src="https://img.shields.io/badge/Data-R2R--CE%20%26%20RxR--CE-orange" alt="Evaluation Data"></a>
 </p>
 
 ## 🧭 Overview
