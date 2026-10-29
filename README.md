@@ -7,6 +7,7 @@
   <a href="https://arxiv.org/abs/2610.23203"><img src="https://img.shields.io/badge/arXiv-2610.23203-red" alt="arXiv"></a>
   <a href="https://github.com/simplevln/SimpleVLN"><img src="https://img.shields.io/badge/GitHub-SimpleVLN-black?logo=github" alt="GitHub"></a>
   <a href="https://huggingface.co/collections/honglyhly/simplevln-6acd0780a8641f3c2b80fbd3"><img src="https://img.shields.io/badge/Models-SimpleVLN-purple" alt="SimpleVLN Models"></a>
+  <a href="https://huggingface.co/datasets/honglyhly/SimpleVLN_SFT_Data"><img src="https://img.shields.io/badge/Data-SimpleVLN-orange" alt="SimpleVLN Data"></a>
   <a href="#results"><img src="https://img.shields.io/badge/Results-Benchmarks-green" alt="Benchmark Results"></a>
 </p>
 
@@ -117,7 +118,62 @@ Across these four models, RL improves SR by **7.5–10.2 points on R2R-CE** and
 
 <a id="data"></a>
 
-## 📦 Evaluation Data
+## 📦 Data
+
+Training data is released at
+[honglyhly/SimpleVLN_SFT_Data](https://huggingface.co/datasets/honglyhly/SimpleVLN_SFT_Data).
+It contains SFT demonstrations (R2R, RxR, ScaleVLN) and DAgger experience
+(R2R, RxR). After extraction, the layout is:
+
+```text
+SFT/
+├── annotations/
+│   ├── R2R/
+│   │   └── annotations.json
+│   ├── RxR/
+│   │   └── annotations.json
+│   └── ScaleVLN/
+│       └── annotations.json
+├── R2R/
+│   └── 2n8kARJN3HM/
+│       └── 000135/
+│           └── rgb/
+│               ├── 001.jpg
+│               └── ...
+├── RxR/
+│   └── 2n8kARJN3HM/
+│       └── 014305/
+│           └── rgb/
+│               ├── 001.jpg
+│               └── ...
+└── ScaleVLN/
+    └── 00000-kfPV7w3FaU5/
+        └── 000000/
+            └── rgb/
+                ├── 000.jpg
+                └── ...
+
+DAgger/
+├── annotations/
+│   ├── R2R/
+│   │   └── annotations.json
+│   └── RxR/
+│       └── annotations.json
+├── R2R/
+│   └── 2n8kARJN3HM/
+│       └── 000135/
+│           └── rgb/
+│               ├── 000.jpg
+│               └── ...
+└── RxR/
+    └── SN83YJsR3w2/
+        └── 000001/
+            └── rgb/
+                ├── 000.jpg
+                └── ...
+```
+
+### Evaluation data
 
 The R2R-CE and RxR-CE annotations are included under `eval/data/vln_data/`.
 
