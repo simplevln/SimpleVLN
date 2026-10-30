@@ -15,9 +15,11 @@ from recipe.vln_simplevln.env_server.schemas import StepRequest
 from recipe.vln_simplevln.rollout_smoke import episode_request
 
 
-def test_routing_stays_within_requested_dataset_and_reports_executed_actions(monkeypatch):
-    r2r = SimpleNamespace(scene_id='mp3d/scene/scene.glb')
-    rxr = SimpleNamespace(scene_id='mp3d/scene/scene.glb')
+def test_shared_scene_episode_uses_instruction_and_reports_executed_actions(monkeypatch):
+    r2r = SimpleNamespace(scene_id='mp3d/scene/scene.glb',
+                          instruction=SimpleNamespace(instruction_text='r2r'))
+    rxr = SimpleNamespace(scene_id='mp3d/scene/scene.glb',
+                          instruction=SimpleNamespace(instruction_text='rxr'))
 
     class Env:
         episode_over = False
@@ -40,27 +42,27 @@ def test_routing_stays_within_requested_dataset_and_reports_executed_actions(mon
             pass
 
     env = Env()
-    full = {'r2r::scene::1': r2r, 'rxr::scene::1': rxr}
-    bare = {'r2r::1': r2r, 'rxr::1': rxr}
-    monkeypatch.setattr(worker, '_load_env', lambda _: (env, full, bare, 'r2r'))
+    full = {'scene::1': [r2r, rxr]}
+    bare = {'1': [r2r, rxr]}
+    monkeypatch.setattr(worker, '_load_env', lambda _: (env, full, bare))
     commands, responses = queue.Queue(), queue.Queue()
     for cmd in [
-        {'op': 'reset', 'episode_id': '1', 'scene_id': 'scene', 'dataset_name': 'missing'},
-        {'op': 'reset', 'episode_id': '1', 'dataset_name': 'rxr'},
+        {'op': 'reset', 'episode_id': '1', 'scene_id': 'scene'},
+        {'op': 'reset', 'episode_id': '1', 'scene_id': 'scene', 'instruction': 'rxr'},
         {'op': 'step', 'actions': [1, 1, 1]},
-        {'op': 'episodes', 'dataset_name': 'rxr', 'limit': 10},
+        {'op': 'episodes', 'limit': 10},
         {'op': 'close'},
     ]:
         commands.put(cmd)
     worker.worker_loop(0, 'config.yaml', commands, responses)
     assert responses.get()['ok']  # Ready.
-    assert not responses.get()['ok']  # Unknown dataset cannot fall back to R2R.
+    assert not responses.get()['ok']  # Shared scene and episode id need the instruction.
     reset = responses.get()
     assert reset['instruction'] == 'rxr'
     assert reset['metrics']['oracle_navigation_error'] == 1
     assert responses.get()['executed_actions'] == [1]
     assert episode_request(responses.get()['episode_ids'][0]) == {
-        'episode_id': '1', 'scene_id': 'scene', 'dataset_name': 'rxr'}
+        'episode_id': '1', 'scene_id': 'scene'}
 
 
 def test_timeout_retires_worker_before_it_can_serve_another_session():
@@ -103,9 +105,8 @@ def test_empty_action_request_is_rejected():
         StepRequest(actions=[])
 
 
-def test_smoke_rejects_conflicting_dataset_name():
-    with pytest.raises(ValueError):
-        episode_request('rxr::scene::1', 'r2r')
+def test_episode_request_parses_scene_and_episode():
+    assert episode_request('scene::1') == {'episode_id': '1', 'scene_id': 'scene'}
 
 
 class FakeWorker:

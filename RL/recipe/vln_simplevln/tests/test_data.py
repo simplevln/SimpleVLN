@@ -38,24 +38,26 @@ def test_parquet_round_trip_restores_one_dataset(tmp_path):
     episode = {'episode_id': 7, 'scene_id': 'mp3d/scene/scene.glb',
                'instruction': {'instruction_text': 'go'},
                'start_position': [0, 0, 0], 'reference_path': [[0, 0, 0], [1, 0, 0]]}
-    rows = episode_rows([episode], 'r2r_train') + episode_rows(
-        [{'episode_id': 8, 'scene_id': 'hm3d/train/a/a.basis.glb', 'instruction': 'other'}],
-        'scalevln_gen')
+    rows = episode_rows([
+        episode,
+        {'episode_id': 8, 'scene_id': 'hm3d/train/a/a.basis.glb', 'instruction': 'other'},
+    ])
     out = tmp_path / 'vln_train.parquet'
     pq.write_table(pa.Table.from_pylist(rows), out)
-    path = materialize_dataset_json(str(out), 'r2r_train', str(tmp_path))
+    path = materialize_dataset_json(str(out), str(tmp_path))
     with gzip.open(path, 'rt') as stream:
         payload = json.load(stream)
-    assert path.endswith('r2r_train.json.gz')
-    assert len(payload['episodes']) == 1
+    assert path.endswith('vln_train.json.gz')
+    assert len(payload['episodes']) == 2
     assert payload['episodes'][0]['start_position'] == [0, 0, 0]
     assert payload['episodes'][0]['reference_path'] == [[0, 0, 0], [1, 0, 0]]
+    assert 'dataset_name' not in rows[0]['extra_info']
 
 
 def test_duplicate_episode_key_is_rejected():
     episode = {'episode_id': 1, 'scene_id': 'mp3d/a/a.glb'}
     with pytest.raises(ValueError, match='Duplicate'):
-        episode_rows([episode, episode], 'r2r')
+        episode_rows([episode, episode])
 
 
 def test_manifest_cli_combines_sources_without_losing_routing(tmp_path):
@@ -74,6 +76,6 @@ def test_manifest_cli_combines_sources_without_losing_routing(tmp_path):
                             cwd=Path(__file__).resolve().parents[3], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     rows = pq.read_table(output).to_pylist()
-    assert [r['extra_info']['dataset_name'] for r in rows] == ['r2r', 'rxr']
+    assert 'dataset_name' not in rows[0]['extra_info']
     assert [r['extra_info']['instruction'] for r in rows] == ['r2r', 'rxr']
     assert {r['extra_info']['episode_id'] for r in rows} == {'1'}

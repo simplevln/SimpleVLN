@@ -27,14 +27,12 @@ from recipe.vln_simplevln.full_episode_agent_loop import DecisionGen, run_episod
 from recipe.vln_simplevln.prompt import build_simplevln_messages_b64
 
 
-def episode_request(key: str, dataset_name: str | None = None) -> dict:
-    parts = key.split("::", 2)
-    if len(parts) == 3:
-        name, scene_id, episode_id = parts
-        if dataset_name is not None and name != dataset_name:
-            raise ValueError(f"Episode belongs to {name}, not {dataset_name}")
-        return {"episode_id": episode_id, "scene_id": scene_id, "dataset_name": name}
-    return {"episode_id": key, "dataset_name": dataset_name}
+def episode_request(key: str) -> dict:
+    parts = key.split("::")
+    if len(parts) == 2:
+        scene_id, episode_id = parts
+        return {"episode_id": episode_id, "scene_id": scene_id}
+    return {"episode_id": key}
 
 
 def make_decide(client: httpx.AsyncClient, model: str, temperature: float,
@@ -55,9 +53,7 @@ async def main():
     ap.add_argument("--env-url", default="http://127.0.0.1:8002")
     ap.add_argument("--vllm-url", default="http://127.0.0.1:8000")
     ap.add_argument("--model", required=True)
-    ap.add_argument("--dataset-name", default=None,
-                    help="Name of the env_server dataset to route to (default: primary).")
-    ap.add_argument("--episode-ids", help="Comma-separated episode IDs or dataset::scene::episode keys")
+    ap.add_argument("--episode-ids", help="Comma-separated episode IDs or scene::episode keys")
     ap.add_argument("--n-episodes", type=int, default=8)
     ap.add_argument("--concurrency", type=int, default=1)
     ap.add_argument("--max-decisions", type=int, default=64)
@@ -75,10 +71,7 @@ async def main():
         episode_ids = [e.strip() for e in args.episode_ids.split(",") if e.strip()]
     async with httpx.AsyncClient(base_url=args.env_url, timeout=30) as ec:
         if not episode_ids:
-            params = {"limit": args.n_episodes}
-            if args.dataset_name:
-                params["dataset_name"] = args.dataset_name
-            r = await ec.get("/v1/episodes", params=params)
+            r = await ec.get("/v1/episodes", params={"limit": args.n_episodes})
             r.raise_for_status()
             episode_ids = r.json()["episode_ids"]
     episode_ids = episode_ids[: args.n_episodes]
@@ -91,10 +84,10 @@ async def main():
 
     async def one(ep: str):
         async with sem:
-            env = VLNEnv(args.env_url, dataset_name=args.dataset_name)
+            env = VLNEnv(args.env_url)
             try:
                 traj = await run_episode(
-                    env, episode_request(ep, args.dataset_name),
+                    env, episode_request(ep),
                     decide, group_uid=ep, trajectory_uid=f"{ep}#0",
                     max_decisions=args.max_decisions,
                 )

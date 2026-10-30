@@ -37,16 +37,7 @@ The released annotations share Habitat's `R2RVLN-v1` episode schema.
 
 ## Training Data
 
-Use the combined `manifests/vln_train.parquet` from the RL data release.
-It contains **6,901 episodes**:
-
-| Dataset key | Episodes |
-|---|---:|
-| `r2r_train` | 500 |
-| `rxr_train` | 500 |
-| `r2r_gen` | 1,343 |
-| `rxr_gen` | 1,558 |
-| `scalevln_gen` | 3,000 |
+Use `manifests/vln_train.parquet` from the RL data release.
 
 Set the data roots on every environment-service node:
 
@@ -62,10 +53,9 @@ directory that contains `mp3d/` and `hm3d/train/`. MP3D episode paths are
 `hm3d/train/<scene>/<scene>.basis.glb`.
 
 Each manifest row routes to an environment episode using
-`(dataset_name, scene_id, episode_id)`. Keep dataset keys consistent with the YAML.
-A mismatched key is an error; it must not select an episode from another dataset.
+`(scene_id, episode_id)`. When that pair is shared, the instruction text selects the episode.
 
-For custom annotations, edit the dataset YAML and build one combined manifest:
+For custom annotations, point the YAML at the annotation files and build one manifest:
 
 ```bash
 python -m recipe.vln_simplevln.make_manifest \

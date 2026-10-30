@@ -1,7 +1,5 @@
 # @package _global_
-# Unified VLN habitat config. One shared Env (sim / sensors / measures) with a list of
-# datasets merged into it. Each parquet row's ``extra_info.dataset_name`` picks which
-# dataset the requested episode belongs to at reset().
+# Unified VLN habitat config. One shared Env loads every episode in the training parquet.
 #
 # All datasets share hfov=90 (R2R training camera). NDTW is intentionally NOT enabled here
 # (only relevant for RxR val_unseen evaluation, which lives under Eval/).
@@ -57,37 +55,11 @@ habitat:
         success_distance: 3.0
       oracle_navigation_error:
         type: OracleNavigationError
-  # `habitat.dataset` supplies defaults; per-dataset `datasets:` below override
-  # {type, split, scenes_dir, data_path} at load time.
   dataset:
     type: R2RVLN-v1
     split: train
     scenes_dir: ${oc.env:VLN_SCENE_ROOT,./data/scene_datasets}
     data_path: ${oc.env:VLN_RL_DATA_ROOT,./data/release_rl_data}/manifests/vln_train.parquet
 
-# env_server loads every entry here into the same Env and indexes episodes by the key
-# name; the first entry supplies the primary dataset (Env is built from it).
 # VLN_SCENE_ROOT is the scene_datasets directory. Episode scene_id already
-# starts with mp3d/ or hm3d/train/, so scenes_dir is that directory for every split.
-# Every entry reads the same parquet; dataset_name selects its episodes.
-datasets:
-  r2r_train:
-    data_path: ${oc.env:VLN_RL_DATA_ROOT,./data/release_rl_data}/manifests/vln_train.parquet
-    split: train
-    scenes_dir: ${oc.env:VLN_SCENE_ROOT,./data/scene_datasets}
-  rxr_train:
-    data_path: ${oc.env:VLN_RL_DATA_ROOT,./data/release_rl_data}/manifests/vln_train.parquet
-    split: train
-    scenes_dir: ${oc.env:VLN_SCENE_ROOT,./data/scene_datasets}
-  r2r_gen:
-    data_path: ${oc.env:VLN_RL_DATA_ROOT,./data/release_rl_data}/manifests/vln_train.parquet
-    split: train
-    scenes_dir: ${oc.env:VLN_SCENE_ROOT,./data/scene_datasets}
-  rxr_gen:
-    data_path: ${oc.env:VLN_RL_DATA_ROOT,./data/release_rl_data}/manifests/vln_train.parquet
-    split: train
-    scenes_dir: ${oc.env:VLN_SCENE_ROOT,./data/scene_datasets}
-  scalevln_gen:
-    data_path: ${oc.env:VLN_RL_DATA_ROOT,./data/release_rl_data}/manifests/vln_train.parquet
-    split: train
-    scenes_dir: ${oc.env:VLN_SCENE_ROOT,./data/scene_datasets}
+# starts with mp3d/ or hm3d/train/. The training parquet is one file.

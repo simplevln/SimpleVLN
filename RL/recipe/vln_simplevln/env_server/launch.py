@@ -1,8 +1,6 @@
 """Launch the SimpleVLN habitat env_server.
 
-Takes ONE unified habitat config that lists every dataset under a top-level
-``datasets:`` map. Each parquet row's ``extra_info.dataset_name`` picks which
-dataset the requested episode belongs to at reset().
+Takes the habitat config. The training parquet is loaded as one episode set.
 
 Example:
 
@@ -34,7 +32,7 @@ def main():
         description=__doc__,
     )
     p.add_argument("--config", required=True,
-                   help="Unified habitat config yaml with a `datasets:` map at top level.")
+                   help="Habitat config yaml.")
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--port", type=int, default=8002)
     p.add_argument("--pool-size", type=int, default=1,

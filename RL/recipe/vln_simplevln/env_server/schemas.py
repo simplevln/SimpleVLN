@@ -34,8 +34,8 @@ class EpisodeInfo(BaseModel):
 
 class CreateSessionRequest(BaseModel):
     episode_id: str
-    scene_id: Optional[str] = None   # composite key (scene::episode_id) to disambiguate splits
-    dataset_name: Optional[str] = None   # None → env_server's primary (first) dataset
+    scene_id: Optional[str] = None
+    instruction: Optional[str] = None
 
 
 class CreateSessionResponse(BaseModel):

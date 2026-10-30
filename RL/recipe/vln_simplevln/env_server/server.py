@@ -352,7 +352,7 @@ def create_session(req: CreateSessionRequest):
             "message": "No free Habitat worker", "retryable": True}})
     try:
         r = _pool.call_session(session_id, {"op": "reset", "episode_id": req.episode_id, "scene_id": req.scene_id,
-                    "dataset_name": req.dataset_name, "session_id": session_id}, timeout=120)
+                    "instruction": req.instruction, "session_id": session_id}, timeout=120)
     except Exception:
         _pool.release(session_id)
         raise
@@ -417,12 +417,12 @@ def delete_session(session_id: str):
 
 
 @app.get("/v1/episodes")
-def list_episodes(limit: int = 200, dataset_name: Optional[str] = None):
+def list_episodes(limit: int = 200):
     """Convenience: return episode ids from the first worker's dataset."""
     assert _pool
     if limit < 1:
         raise HTTPException(400, detail="limit must be positive")
-    r = _pool.workers[0].call({"op": "episodes", "limit": limit, "dataset_name": dataset_name}, timeout=15)
+    r = _pool.workers[0].call({"op": "episodes", "limit": limit}, timeout=15)
     if not r.get("ok"):
         raise HTTPException(500, detail=r.get("error"))
     return {"episode_ids": r["episode_ids"]}

@@ -2,7 +2,7 @@
 
 IPC: parent sends dict commands via cmd_queue, worker sends dict responses via resp_queue.
 Commands:
-  {"op": "reset",    "episode_id": str, "scene_id": str, "session_id": str}
+  {"op": "reset",    "episode_id": str, "scene_id": str, "instruction": str, "session_id": str}
   {"op": "step",     "actions": [int, ...]}
   {"op": "metrics"}
   {"op": "close"}
@@ -53,11 +53,10 @@ def _scene_key(scene_id: str) -> str:
     return os.path.basename(str(scene_id)).split(".")[0]
 
 
-def materialize_dataset_json(data_path: str, dataset_name: str, dest_dir: str) -> str:
-    """Turn one dataset's rows from the shared parquet into a Habitat json.gz.
+def materialize_dataset_json(data_path: str, dest_dir: str) -> str:
+    """Turn the training parquet into the Habitat json.gz the simulator loads.
 
-    The released RL package is a single parquet. Habitat still loads
-    ``{"episodes": [...]}``. Non-parquet paths are returned unchanged.
+    Non-parquet paths are returned unchanged.
     """
     path = str(data_path)
     if not path.endswith(".parquet"):
@@ -66,30 +65,52 @@ def materialize_dataset_json(data_path: str, dataset_name: str, dest_dir: str) -
 
     episodes = []
     for row in pq.read_table(path).to_pylist():
-        extra = row.get("extra_info") or {}
-        if str(extra.get("dataset_name")) != dataset_name:
-            continue
         episode = row.get("episode")
         if isinstance(episode, str):
             episode = json.loads(episode)
         if not isinstance(episode, dict):
             raise ValueError(
-                f"{path} has no Habitat episode for {dataset_name}. "
+                f"{path} has no Habitat episode record. "
                 "Rebuild the parquet with recipe.vln_simplevln.make_manifest."
             )
         episodes.append(episode)
     if not episodes:
-        raise ValueError(f"No episodes for {dataset_name} in {path}")
-    out = os.path.join(dest_dir, f"{dataset_name}.json.gz")
+        raise ValueError(f"No episodes in {path}")
+    out = os.path.join(dest_dir, "vln_train.json.gz")
     with gzip.open(out, "wt", encoding="utf-8") as stream:
         json.dump({"episodes": episodes}, stream)
     return out
 
 
+def _episode_instruction(episode) -> str:
+    instruction = getattr(episode, "instruction", None)
+    if instruction is None and isinstance(episode, dict):
+        instruction = episode.get("instruction")
+    text = getattr(instruction, "instruction_text", None)
+    if text is None and isinstance(instruction, dict):
+        text = instruction.get("instruction_text", "")
+    if isinstance(text, (list, tuple)):
+        text = text[0] if text else ""
+    return str(text or "")
+
+
+def _select_episode(matches, instruction):
+    if not matches:
+        return None
+    if instruction:
+        exact = [episode for episode in matches if _episode_instruction(episode) == instruction]
+        if len(exact) == 1:
+            return exact[0]
+        if len(exact) > 1:
+            return None
+    return matches[0] if len(matches) == 1 else None
+
+
 def _load_env(config_path: str):
-    """Load the unified habitat config: one shared Env + every dataset listed under
-    ``datasets:``. Episodes are indexed under a per-``dataset_name`` composite key so
-    reset() can route requests by dataset_name even when scene::episode_id collides.
+    """Load the training parquet into one Habitat Env.
+
+    Episodes are indexed by scene and episode id. When that pair is shared,
+    reset() uses the instruction text.
     """
     import habitat
     from habitat import Env
@@ -101,11 +122,6 @@ def _load_env(config_path: str):
     _ = habitat_support  # Registers the two oracle measurements used for training.
 
     cfg = get_config(config_path)
-    ds_specs = cfg.get("datasets")
-    if not ds_specs or len(ds_specs) == 0:
-        raise ValueError(
-            f"{config_path} has no top-level `datasets:` map; env_server requires at least one entry."
-        )
 
     with habitat.config.read_write(cfg):
         # collisions is read by step (); top_down_map is visualization-only and is
@@ -123,56 +139,22 @@ def _load_env(config_path: str):
         cfg.habitat.task.measurements.update(measures_to_add)
 
     episode_cache = tempfile.mkdtemp(prefix="vln_rl_episodes_")
-
-    def _override_dataset_section(ds_cfg, spec, name):
-        """Copy per-dataset {type,split,scenes_dir,data_path} overrides into a dataset cfg."""
-        with habitat.config.read_write(ds_cfg):
-            for k in ("type", "split", "scenes_dir", "data_path"):
-                if k not in spec:
-                    continue
-                value = spec[k]
-                if k == "data_path":
-                    value = materialize_dataset_json(str(value), name, episode_cache)
-                setattr(ds_cfg, k, value)
-        return ds_cfg
-
-    ds_names = list(ds_specs.keys())
-    primary_name = ds_names[0]
-
-    # Build the primary dataset (Env is constructed from it).
-    _override_dataset_section(cfg.habitat.dataset, ds_specs[primary_name], primary_name)
+    with habitat.config.read_write(cfg):
+        cfg.habitat.dataset.data_path = materialize_dataset_json(
+            str(cfg.habitat.dataset.data_path), episode_cache)
     dataset = habitat.datasets.make_dataset(
         id_dataset=cfg.habitat.dataset.type, config=cfg.habitat.dataset)
 
-    # Episode identity includes the dataset; scene/id pairs overlap across sources.
+    # A few scene and episode-id pairs occur twice. The instruction picks one.
     episodes_by_full: dict = {}
     episodes_by_bare: dict = {}
-
-    def _index(ds, name: str):
-        for ep in ds.episodes:
-            sk = _scene_key(ep.scene_id)
-            full_key = f"{name}::{sk}::{ep.episode_id}"
-            if full_key in episodes_by_full:
-                raise ValueError(f"Duplicate episode key: {full_key}")
-            episodes_by_full[full_key] = ep
-            bare_key = f"{name}::{ep.episode_id}"
-            # Ambiguous IDs require an explicit scene rather than an arbitrary match.
-            episodes_by_bare[bare_key] = None if bare_key in episodes_by_bare else ep
-
-    _index(dataset, primary_name)
-
-    # Merge every additional dataset. Build a fresh dataset-section copy for each, then
-    # ``make_dataset`` produces its episode list. Episodes are indexed under the entry name.
-    for name in ds_names[1:]:
-        sub_cfg = get_config(config_path)
-        _override_dataset_section(sub_cfg.habitat.dataset, ds_specs[name], name)
-        ds2 = habitat.datasets.make_dataset(
-            id_dataset=sub_cfg.habitat.dataset.type, config=sub_cfg.habitat.dataset)
-        dataset.episodes.extend(ds2.episodes)
-        _index(ds2, name)
+    for episode in dataset.episodes:
+        full_key = f"{_scene_key(episode.scene_id)}::{episode.episode_id}"
+        episodes_by_full.setdefault(full_key, []).append(episode)
+        episodes_by_bare.setdefault(str(episode.episode_id), []).append(episode)
 
     env = Env(config=cfg, dataset=dataset)
-    return env, episodes_by_full, episodes_by_bare, primary_name
+    return env, episodes_by_full, episodes_by_bare
 
 
 def worker_loop(worker_id: int, config_path: str,
@@ -181,7 +163,7 @@ def worker_loop(worker_id: int, config_path: str,
     try:
         if gpu_id >= 0:
             os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-        env, episodes_by_full, episodes_by_bare, primary_name = _load_env(config_path)
+        env, episodes_by_full, episodes_by_bare = _load_env(config_path)
         resp_queue.put({"ok": True, "msg": f"worker {worker_id} ready ({len(episodes_by_full)} episodes)"})
     except Exception:
         resp_queue.put({"ok": False, "error": traceback.format_exc()})
@@ -203,13 +185,12 @@ def worker_loop(worker_id: int, config_path: str,
             if op == "reset":
                 ep_id = str(cmd["episode_id"])
                 scene = cmd.get("scene_id")
-                name = cmd.get("dataset_name") or primary_name
-                if scene:
-                    ep = episodes_by_full.get(f"{name}::{_scene_key(scene)}::{ep_id}")
-                else:
-                    ep = episodes_by_bare.get(f"{name}::{ep_id}")
+                instruction = cmd.get("instruction")
+                matches = (episodes_by_full.get(f"{_scene_key(scene)}::{ep_id}")
+                           if scene else episodes_by_bare.get(ep_id))
+                ep = _select_episode(matches or [], instruction)
                 if ep is None:
-                    resp_queue.put({"ok": False, "error": f"episode_id {ep_id} (scene={scene}, dataset_name={name}) not found"})
+                    resp_queue.put({"ok": False, "error": f"episode_id {ep_id} (scene={scene}) not found"})
                     continue
                 env.current_episode = ep
                 obs = env.reset()
@@ -267,9 +248,7 @@ def worker_loop(worker_id: int, config_path: str,
 
             if op == "episodes":
                 limit = int(cmd.get("limit", 200))
-                name = cmd.get("dataset_name")
-                keys = [key for key in episodes_by_full if name is None or key.startswith(f"{name}::")]
-                resp_queue.put({"ok": True, "episode_ids": keys[:limit]})
+                resp_queue.put({"ok": True, "episode_ids": list(episodes_by_full)[:limit]})
                 continue
 
             resp_queue.put({"ok": False, "error": f"unknown op: {op}"})

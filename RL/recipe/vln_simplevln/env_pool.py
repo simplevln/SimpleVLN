@@ -9,11 +9,10 @@ import httpx
 
 
 class VLNEnv:
-    def __init__(self, base_url: str, dataset_name: str | None = None,
+    def __init__(self, base_url: str,
                  reset_timeout_s: float = 600.0, reset_retry_s: float = 2.0,
                  timeout: float = 120.0):
         self._client = httpx.AsyncClient(base_url=base_url.rstrip("/"), timeout=timeout)
-        self._dataset_name = dataset_name
         self._reset_timeout_s = reset_timeout_s
         self._reset_retry_s = reset_retry_s
         self.session_id: str | None = None
@@ -26,7 +25,7 @@ class VLNEnv:
         """Start one trajectory. Returns the first frame's JPEG base64."""
         body = {"episode_id": str(extra_info["episode_id"]),
                 "scene_id": str(extra_info.get("scene_id", "")),
-                "dataset_name": extra_info.get("dataset_name", self._dataset_name)}
+                "instruction": extra_info.get("instruction")}
         deadline = asyncio.get_event_loop().time() + self._reset_timeout_s
         while True:
             try:

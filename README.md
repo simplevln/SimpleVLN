@@ -5,9 +5,9 @@
 <p align="center">
   <a href="https://simplevln.github.io/"><img src="https://img.shields.io/badge/Homepage-SimpleVLN-blue" alt="Homepage"></a>
   <a href="https://arxiv.org/abs/2610.23203"><img src="https://img.shields.io/badge/arXiv-2610.23203-red" alt="arXiv"></a>
-  <a href="https://github.com/simplevln/SimpleVLN"><img src="https://img.shields.io/badge/GitHub-SimpleVLN-black?logo=github" alt="GitHub"></a>
   <a href="https://huggingface.co/collections/honglyhly/simplevln-6acd0780a8641f3c2b80fbd3"><img src="https://img.shields.io/badge/Models-SimpleVLN-purple" alt="SimpleVLN Models"></a>
-  <a href="https://huggingface.co/datasets/honglyhly/SimpleVLN_SFT_Data"><img src="https://img.shields.io/badge/Data-SimpleVLN-orange" alt="SimpleVLN Data"></a>
+  <a href="https://huggingface.co/datasets/honglyhly/SimpleVLN_SFT_Data"><img src="https://img.shields.io/badge/SFT-Data-orange" alt="SFT Data"></a>
+  <a href="https://huggingface.co/datasets/honglyhly/SimpleVLN_RL_Data"><img src="https://img.shields.io/badge/RL-Data-orange" alt="RL Data"></a>
   <a href="#results"><img src="https://img.shields.io/badge/Results-Benchmarks-green" alt="Benchmark Results"></a>
 </p>
 
