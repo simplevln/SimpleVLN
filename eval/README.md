@@ -65,7 +65,7 @@ python eval/scripts/prepare_eval_data.py --data-root eval/data/vln_data --check-
 ```
 
 The extracted layout must be
-`eval/data/vln_data/scene_datasets/v1/tasks/mp3d/<scene>/`, containing
+`eval/data/vln_data/scene_datasets/mp3d/<scene>/`, containing
 `<scene>.glb`, `<scene>.navmesh`, `<scene>.house`, and `<scene>_semantic.ply`.
 The archive should have no additional enclosing directory.
 

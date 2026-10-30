@@ -116,14 +116,50 @@ Across these four models, RL improves SR by **7.5–10.2 points on R2R-CE** and
 
 </details>
 
+<a id="getting-started"></a>
+
+## Getting Started
+
+```bash
+conda create -n simplevln python=3.10 -y
+conda activate simplevln
+conda install habitat-sim=0.3.3 headless -c conda-forge -c aihabitat
+python -m pip install -r eval/requirements.txt
+```
+
+Install Habitat-Sim before the Python dependencies. `eval/requirements.txt` then installs Habitat-Lab and Habitat-Baselines from the `v0.3.3` tag.
+
 <a id="data"></a>
 
 ## 📦 Data
 
-Training data is released at
+### Scene datasets
+
+MP3D scenes for R2R and RxR, and HM3D scenes for ScaleVLN, are released at
+[honglyhly/SimpleVLN_SCENCE_DATA](https://huggingface.co/datasets/honglyhly/SimpleVLN_SCENCE_DATA).
+After extraction, the layout is:
+
+```text
+scene_datasets/
+├── mp3d/
+│   └── 17DRP5sb8fy/
+│       ├── 17DRP5sb8fy.glb
+│       ├── 17DRP5sb8fy.navmesh
+│       └── ...
+└── hm3d/
+    └── train/
+        └── 00000-kfPV7w3FaU5/
+            ├── kfPV7w3FaU5.basis.glb
+            ├── kfPV7w3FaU5.basis.navmesh
+            └── ...
+```
+
+### SFT and DAgger trajectories
+
+SFT demonstrations (R2R, RxR, ScaleVLN) and DAgger experience (R2R, RxR) are
+released at
 [honglyhly/SimpleVLN_SFT_Data](https://huggingface.co/datasets/honglyhly/SimpleVLN_SFT_Data).
-It contains SFT demonstrations (R2R, RxR, ScaleVLN) and DAgger experience
-(R2R, RxR). After extraction, the layout is:
+After extraction, the layout is:
 
 ```text
 SFT/
@@ -173,6 +209,18 @@ DAgger/
                 └── ...
 ```
 
+### Reinforcement learning data
+
+RL episodes are released at
+[honglyhly/SimpleVLN_RL_Data](https://huggingface.co/datasets/honglyhly/SimpleVLN_RL_Data).
+After extraction, the layout is:
+
+```text
+release_rl_data/
+└── manifests/
+    └── vln_train.parquet
+```
+
 ### Evaluation data
 
 The R2R-CE and RxR-CE annotations are included under `eval/data/vln_data/`.
@@ -183,9 +231,8 @@ The R2R-CE and RxR-CE annotations are included under `eval/data/vln_data/`.
 | RxR-CE, English guide | `val_unseen` | 3,669 |
 
 The package includes the reference trajectories used for RxR nDTW and sDTW.
-Both benchmarks share **11 Matterport3D scenes**, obtained through the
-[official access process](https://niessner.github.io/Matterport/#download).
-Prepare those scenes from an existing Habitat-format MP3D installation:
+Both benchmarks use **11 Matterport3D scenes** from the scene datasets above.
+Copy those scenes from an existing Habitat-format MP3D installation:
 
 ```bash
 python eval/scripts/prepare_eval_data.py --mp3d-root /path/to/mp3d

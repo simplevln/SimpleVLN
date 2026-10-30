@@ -1,0 +1,2 @@
+# Conversion only: no Habitat, CUDA or PyTorch required.
+tqdm

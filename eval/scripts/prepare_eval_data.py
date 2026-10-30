@@ -13,7 +13,7 @@ import tempfile
 
 
 BUNDLED_ROOT = Path(__file__).resolve().parents[1] / "data" / "vln_data"
-SCENE_PREFIX = PurePosixPath("scene_datasets/v1/tasks/mp3d")
+SCENE_PREFIX = PurePosixPath("scene_datasets/mp3d")
 
 
 def sha256(path):

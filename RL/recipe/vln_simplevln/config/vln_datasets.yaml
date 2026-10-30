@@ -1,0 +1,93 @@
+# @package _global_
+# Unified VLN habitat config. One shared Env (sim / sensors / measures) with a list of
+# datasets merged into it. Each parquet row's ``extra_info.dataset_name`` picks which
+# dataset the requested episode belongs to at reset().
+#
+# All datasets share hfov=90 (R2R training camera). NDTW is intentionally NOT enabled here
+# (only relevant for RxR val_unseen evaluation, which lives under Eval/).
+
+defaults:
+  - /habitat: habitat_config_base
+  - /habitat/task: vln_r2r
+  - /habitat/simulator/sensor_setups@habitat.simulator.agents.main_agent: rgbd_agent
+  - /habitat/dataset/vln: mp3d_r2r
+  - /habitat/task/lab_sensors:
+    - gps_sensor
+    - compass_sensor
+  - /habitat/task/measurements/oracle_success@habitat.task.measurements.oracle_success
+  - _self_
+
+habitat:
+  environment:
+    max_episode_steps: 400
+    iterator_options:
+      max_scene_repeat_steps: 50000
+      shuffle: False
+  simulator:
+    agents:
+      main_agent:
+        sim_sensors:
+          rgb_sensor:
+            width: 640
+            height: 480
+            hfov: 90
+          depth_sensor:
+            width: 640
+            height: 480
+            hfov: 90
+            min_depth: 0.0
+            max_depth: 10.0
+    forward_step_size: 0.25
+    turn_angle: 15
+    requires_textures: true
+    habitat_sim_v0:
+      gpu_device_id: 0
+  task:
+    measurements:
+      distance_to_goal:
+        type: DistanceToGoal
+        distance_to: POINT
+      success:
+        type: Success
+        success_distance: 3.0
+      spl:
+        type: SPL
+      oracle_success:
+        type: OracleSuccess
+        success_distance: 3.0
+      oracle_navigation_error:
+        type: OracleNavigationError
+  # `habitat.dataset` supplies defaults; per-dataset `datasets:` below override
+  # {type, split, scenes_dir, data_path} at load time.
+  dataset:
+    type: R2RVLN-v1
+    split: train
+    scenes_dir: ${oc.env:VLN_SCENE_ROOT,./data/scene_datasets}
+    data_path: ${oc.env:VLN_RL_DATA_ROOT,./data/release_rl_data}/manifests/vln_train.parquet
+
+# env_server loads every entry here into the same Env and indexes episodes by the key
+# name; the first entry supplies the primary dataset (Env is built from it).
+# VLN_SCENE_ROOT is the scene_datasets directory. Episode scene_id already
+# starts with mp3d/ or hm3d/train/, so scenes_dir is that directory for every split.
+# Every entry reads the same parquet; dataset_name selects its episodes.
+datasets:
+  r2r_train:
+    data_path: ${oc.env:VLN_RL_DATA_ROOT,./data/release_rl_data}/manifests/vln_train.parquet
+    split: train
+    scenes_dir: ${oc.env:VLN_SCENE_ROOT,./data/scene_datasets}
+  rxr_train:
+    data_path: ${oc.env:VLN_RL_DATA_ROOT,./data/release_rl_data}/manifests/vln_train.parquet
+    split: train
+    scenes_dir: ${oc.env:VLN_SCENE_ROOT,./data/scene_datasets}
+  r2r_gen:
+    data_path: ${oc.env:VLN_RL_DATA_ROOT,./data/release_rl_data}/manifests/vln_train.parquet
+    split: train
+    scenes_dir: ${oc.env:VLN_SCENE_ROOT,./data/scene_datasets}
+  rxr_gen:
+    data_path: ${oc.env:VLN_RL_DATA_ROOT,./data/release_rl_data}/manifests/vln_train.parquet
+    split: train
+    scenes_dir: ${oc.env:VLN_SCENE_ROOT,./data/scene_datasets}
+  scalevln_gen:
+    data_path: ${oc.env:VLN_RL_DATA_ROOT,./data/release_rl_data}/manifests/vln_train.parquet
+    split: train
+    scenes_dir: ${oc.env:VLN_SCENE_ROOT,./data/scene_datasets}

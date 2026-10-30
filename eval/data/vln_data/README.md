@@ -29,7 +29,7 @@ vln_data/
 ├── SHA256SUMS
 ├── NOTICE.md
 ├── LICENSE-CC-BY-4.0.txt
-└── scene_datasets/v1/tasks/mp3d/    # Prepared locally; excluded from Git
+└── scene_datasets/mp3d/    # Prepared locally; excluded from Git
     └── <scene>/
         ├── <scene>.glb
         ├── <scene>.navmesh
@@ -38,7 +38,7 @@ vln_data/
 ```
 
 Episode scene paths are relative, such as `mp3d/<scene>/<scene>.glb`. The YAML
-configurations prepend `VLN_DATA_ROOT/scene_datasets/v1/tasks`. No paths from the
+configurations prepend `VLN_DATA_ROOT/scene_datasets`. No paths from the
 machine that prepared this package are stored in the annotations or manifest.
 There are no pre-rendered image folders: Habitat renders observations from scenes.
 

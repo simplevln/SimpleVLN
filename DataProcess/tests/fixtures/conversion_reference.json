@@ -1,0 +1,621 @@
+{
+  "seed": 0,
+  "frame_count": 15,
+  "episodes": [
+    {
+      "episode_id": 1,
+      "video_id": "scene_1",
+      "instruction": [
+        "go"
+      ],
+      "actions": [
+        -1,
+        1,
+        1,
+        2,
+        1,
+        3,
+        3,
+        1,
+        2,
+        3,
+        1,
+        1,
+        2,
+        0
+      ]
+    },
+    {
+      "episode_id": 2,
+      "video_id": "scene_2",
+      "instruction": [
+        "go"
+      ],
+      "actions": [
+        -1,
+        1,
+        1,
+        2,
+        1,
+        3,
+        3,
+        1,
+        2,
+        3,
+        1,
+        1,
+        2,
+        0
+      ]
+    }
+  ],
+  "expected": {
+    "vln": [
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You have been given a video of historical observations<image> and an image of the current observation<image>. Your assigned task is: 'go'. Analyze this series of images to decide your next move, which could involve turning left or right by a specific degree or moving forward a certain distance."
+          },
+          {
+            "from": "assistant",
+            "value": "forward 25 cm, forward 25 cm, turn left 15 degree"
+          }
+        ],
+        "episode_id": "1",
+        "task type": "vln",
+        "images": [
+          "scene_1/000.jpg",
+          "scene_1/000.jpg"
+        ]
+      },
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You have been given a video of historical observations<image><image><image> and an image of the current observation<image>. Your assigned task is: 'go'. Analyze this series of images to decide your next move, which could involve turning left or right by a specific degree or moving forward a certain distance."
+          },
+          {
+            "from": "assistant",
+            "value": "forward 25 cm, turn right 15 degree, turn right 15 degree"
+          }
+        ],
+        "episode_id": "1",
+        "task type": "vln",
+        "images": [
+          "scene_1/000.jpg",
+          "scene_1/001.jpg",
+          "scene_1/002.jpg",
+          "scene_1/003.jpg"
+        ]
+      },
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You have been given a video of historical observations<image><image><image><image><image><image> and an image of the current observation<image>. Your assigned task is: 'go'. Analyze this series of images to decide your next move, which could involve turning left or right by a specific degree or moving forward a certain distance."
+          },
+          {
+            "from": "assistant",
+            "value": "forward 25 cm, turn left 15 degree, turn right 15 degree"
+          }
+        ],
+        "episode_id": "1",
+        "task type": "vln",
+        "images": [
+          "scene_1/000.jpg",
+          "scene_1/001.jpg",
+          "scene_1/002.jpg",
+          "scene_1/003.jpg",
+          "scene_1/004.jpg",
+          "scene_1/005.jpg",
+          "scene_1/006.jpg"
+        ]
+      },
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You have been given a video of historical observations<image><image><image><image><image><image><image><image> and an image of the current observation<image>. Your assigned task is: 'go'. Analyze this series of images to decide your next move, which could involve turning left or right by a specific degree or moving forward a certain distance."
+          },
+          {
+            "from": "assistant",
+            "value": "forward 50 cm, turn left 15 degree, stop"
+          }
+        ],
+        "episode_id": "1",
+        "task type": "vln",
+        "images": [
+          "scene_1/000.jpg",
+          "scene_1/001.jpg",
+          "scene_1/002.jpg",
+          "scene_1/003.jpg",
+          "scene_1/005.jpg",
+          "scene_1/006.jpg",
+          "scene_1/007.jpg",
+          "scene_1/008.jpg",
+          "scene_1/009.jpg"
+        ]
+      },
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You have been given a video of historical observations<image> and an image of the current observation<image>. Your assigned task is: 'go'. Analyze this series of images to decide your next move, which could involve turning left or right by a specific degree or moving forward a certain distance."
+          },
+          {
+            "from": "assistant",
+            "value": "forward 50 cm, turn left 15 degree, forward 25 cm"
+          }
+        ],
+        "episode_id": "2",
+        "task type": "vln",
+        "images": [
+          "scene_2/000.jpg",
+          "scene_2/000.jpg"
+        ]
+      },
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You have been given a video of historical observations<image><image><image><image> and an image of the current observation<image>. Your assigned task is: 'go'. Analyze this series of images to decide your next move, which could involve turning left or right by a specific degree or moving forward a certain distance."
+          },
+          {
+            "from": "assistant",
+            "value": "turn right 30 degree, forward 25 cm, turn left 15 degree"
+          }
+        ],
+        "episode_id": "2",
+        "task type": "vln",
+        "images": [
+          "scene_2/000.jpg",
+          "scene_2/001.jpg",
+          "scene_2/002.jpg",
+          "scene_2/003.jpg",
+          "scene_2/004.jpg"
+        ]
+      },
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You have been given a video of historical observations<image><image><image><image><image><image><image><image> and an image of the current observation<image>. Your assigned task is: 'go'. Analyze this series of images to decide your next move, which could involve turning left or right by a specific degree or moving forward a certain distance."
+          },
+          {
+            "from": "assistant",
+            "value": "turn right 15 degree, forward 50 cm, turn left 15 degree"
+          }
+        ],
+        "episode_id": "2",
+        "task type": "vln",
+        "images": [
+          "scene_2/000.jpg",
+          "scene_2/001.jpg",
+          "scene_2/002.jpg",
+          "scene_2/003.jpg",
+          "scene_2/004.jpg",
+          "scene_2/005.jpg",
+          "scene_2/006.jpg",
+          "scene_2/007.jpg",
+          "scene_2/008.jpg"
+        ]
+      },
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You have been given a video of historical observations<image><image><image><image><image><image><image><image> and an image of the current observation<image>. Your assigned task is: 'go'. Analyze this series of images to decide your next move, which could involve turning left or right by a specific degree or moving forward a certain distance."
+          },
+          {
+            "from": "assistant",
+            "value": "stop"
+          }
+        ],
+        "episode_id": "2",
+        "task type": "vln",
+        "images": [
+          "scene_2/000.jpg",
+          "scene_2/002.jpg",
+          "scene_2/003.jpg",
+          "scene_2/005.jpg",
+          "scene_2/006.jpg",
+          "scene_2/008.jpg",
+          "scene_2/009.jpg",
+          "scene_2/011.jpg",
+          "scene_2/012.jpg"
+        ]
+      }
+    ],
+    "idm": [
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You have been given an image of current view<image> and an image of the goal view<image>. Analyze the two images to predict the navigation action that would move the robot from the current viewpoint to the goal view, which could involve turning left or right by a specific degree or moving forward a certain distance."
+          },
+          {
+            "from": "assistant",
+            "value": "forward 25 cm, forward 25 cm, turn left 15 degree"
+          }
+        ],
+        "episode_id": "1",
+        "task type": "idm",
+        "images": [
+          "scene_1/000.jpg",
+          "scene_1/003.jpg"
+        ]
+      },
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You have been given an image of current view<image> and an image of the goal view<image>. Analyze the two images to predict the navigation action that would move the robot from the current viewpoint to the goal view, which could involve turning left or right by a specific degree or moving forward a certain distance."
+          },
+          {
+            "from": "assistant",
+            "value": "forward 25 cm, turn right 15 degree, turn right 15 degree"
+          }
+        ],
+        "episode_id": "1",
+        "task type": "idm",
+        "images": [
+          "scene_1/003.jpg",
+          "scene_1/006.jpg"
+        ]
+      },
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You have been given an image of current view<image> and an image of the goal view<image>. Analyze the two images to predict the navigation action that would move the robot from the current viewpoint to the goal view, which could involve turning left or right by a specific degree or moving forward a certain distance."
+          },
+          {
+            "from": "assistant",
+            "value": "forward 25 cm, turn left 15 degree, turn right 15 degree"
+          }
+        ],
+        "episode_id": "1",
+        "task type": "idm",
+        "images": [
+          "scene_1/006.jpg",
+          "scene_1/009.jpg"
+        ]
+      },
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You have been given an image of current view<image> and an image of the goal view<image>. Analyze the two images to predict the navigation action that would move the robot from the current viewpoint to the goal view, which could involve turning left or right by a specific degree or moving forward a certain distance."
+          },
+          {
+            "from": "assistant",
+            "value": "forward 50 cm, turn left 15 degree"
+          }
+        ],
+        "episode_id": "1",
+        "task type": "idm",
+        "images": [
+          "scene_1/009.jpg",
+          "scene_1/012.jpg"
+        ]
+      },
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You have been given an image of current view<image> and an image of the goal view<image>. Analyze the two images to predict the navigation action that would move the robot from the current viewpoint to the goal view, which could involve turning left or right by a specific degree or moving forward a certain distance."
+          },
+          {
+            "from": "assistant",
+            "value": "forward 50 cm, turn left 15 degree, forward 25 cm"
+          }
+        ],
+        "episode_id": "2",
+        "task type": "idm",
+        "images": [
+          "scene_2/000.jpg",
+          "scene_2/004.jpg"
+        ]
+      },
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You have been given an image of current view<image> and an image of the goal view<image>. Analyze the two images to predict the navigation action that would move the robot from the current viewpoint to the goal view, which could involve turning left or right by a specific degree or moving forward a certain distance."
+          },
+          {
+            "from": "assistant",
+            "value": "turn right 30 degree, forward 25 cm, turn left 15 degree"
+          }
+        ],
+        "episode_id": "2",
+        "task type": "idm",
+        "images": [
+          "scene_2/004.jpg",
+          "scene_2/008.jpg"
+        ]
+      },
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You have been given an image of current view<image> and an image of the goal view<image>. Analyze the two images to predict the navigation action that would move the robot from the current viewpoint to the goal view, which could involve turning left or right by a specific degree or moving forward a certain distance."
+          },
+          {
+            "from": "assistant",
+            "value": "turn right 15 degree, forward 50 cm, turn left 15 degree"
+          }
+        ],
+        "episode_id": "2",
+        "task type": "idm",
+        "images": [
+          "scene_2/008.jpg",
+          "scene_2/012.jpg"
+        ]
+      }
+    ],
+    "ffs": [
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You are given a history of observations<image>, followed by the current observation<image> and the executed action: [forward 25 cm, forward 25 cm, turn left 15 degree]. Then you are given four candidate next observations in order. Please select the correct option letter from A/B/C/D. Option A: <image>, Option B: <image>, Option C: <image>, Option D: <image>."
+          },
+          {
+            "from": "assistant",
+            "value": "D"
+          }
+        ],
+        "episode_id": "1",
+        "task type": "ffs",
+        "images": [
+          "scene_1/000.jpg",
+          "scene_1/000.jpg",
+          "scene_1/001.jpg",
+          "scene_2/004.jpg",
+          "scene_1/004.jpg",
+          "scene_1/003.jpg"
+        ]
+      },
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You are given a history of observations<image><image><image>, followed by the current observation<image> and the executed action: [forward 25 cm, turn right 15 degree, turn right 15 degree]. Then you are given four candidate next observations in order. Please select the correct option letter from A/B/C/D. Option A: <image>, Option B: <image>, Option C: <image>, Option D: <image>."
+          },
+          {
+            "from": "assistant",
+            "value": "C"
+          }
+        ],
+        "episode_id": "1",
+        "task type": "ffs",
+        "images": [
+          "scene_1/000.jpg",
+          "scene_1/001.jpg",
+          "scene_1/002.jpg",
+          "scene_1/003.jpg",
+          "scene_2/008.jpg",
+          "scene_1/003.jpg",
+          "scene_1/006.jpg",
+          "scene_1/008.jpg"
+        ]
+      },
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You are given a history of observations<image><image><image><image><image><image>, followed by the current observation<image> and the executed action: [forward 25 cm, turn left 15 degree, turn right 15 degree]. Then you are given four candidate next observations in order. Please select the correct option letter from A/B/C/D. Option A: <image>, Option B: <image>, Option C: <image>, Option D: <image>."
+          },
+          {
+            "from": "assistant",
+            "value": "C"
+          }
+        ],
+        "episode_id": "1",
+        "task type": "ffs",
+        "images": [
+          "scene_1/000.jpg",
+          "scene_1/001.jpg",
+          "scene_1/002.jpg",
+          "scene_1/003.jpg",
+          "scene_1/004.jpg",
+          "scene_1/005.jpg",
+          "scene_1/006.jpg",
+          "scene_2/014.jpg",
+          "scene_1/004.jpg",
+          "scene_1/009.jpg",
+          "scene_1/012.jpg"
+        ]
+      },
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You are given a history of observations<image><image><image><image><image><image><image><image>, followed by the current observation<image> and the executed action: [forward 25 cm, forward 25 cm, turn left 15 degree]. Then you are given four candidate next observations in order. Please select the correct option letter from A/B/C/D. Option A: <image>, Option B: <image>, Option C: <image>, Option D: <image>."
+          },
+          {
+            "from": "assistant",
+            "value": "A"
+          }
+        ],
+        "episode_id": "1",
+        "task type": "ffs",
+        "images": [
+          "scene_1/000.jpg",
+          "scene_1/001.jpg",
+          "scene_1/002.jpg",
+          "scene_1/003.jpg",
+          "scene_1/005.jpg",
+          "scene_1/006.jpg",
+          "scene_1/007.jpg",
+          "scene_1/008.jpg",
+          "scene_1/009.jpg",
+          "scene_1/012.jpg",
+          "scene_2/008.jpg",
+          "scene_1/013.jpg",
+          "scene_1/009.jpg"
+        ]
+      },
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You are given a history of observations<image><image><image><image><image><image><image><image>, followed by the current observation<image> and the executed action: [stop]. Then you are given four candidate next observations in order. Please select the correct option letter from A/B/C/D. Option A: <image>, Option B: <image>, Option C: <image>, Option D: <image>."
+          },
+          {
+            "from": "assistant",
+            "value": "D"
+          }
+        ],
+        "episode_id": "1",
+        "task type": "ffs",
+        "images": [
+          "scene_1/000.jpg",
+          "scene_1/002.jpg",
+          "scene_1/003.jpg",
+          "scene_1/005.jpg",
+          "scene_1/006.jpg",
+          "scene_1/008.jpg",
+          "scene_1/009.jpg",
+          "scene_1/011.jpg",
+          "scene_1/012.jpg",
+          "scene_1/010.jpg",
+          "scene_2/008.jpg",
+          "scene_1/009.jpg",
+          "scene_1/013.jpg"
+        ]
+      },
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You are given a history of observations<image>, followed by the current observation<image> and the executed action: [forward 50 cm, turn left 15 degree, forward 25 cm]. Then you are given four candidate next observations in order. Please select the correct option letter from A/B/C/D. Option A: <image>, Option B: <image>, Option C: <image>, Option D: <image>."
+          },
+          {
+            "from": "assistant",
+            "value": "D"
+          }
+        ],
+        "episode_id": "2",
+        "task type": "ffs",
+        "images": [
+          "scene_2/000.jpg",
+          "scene_2/000.jpg",
+          "scene_2/005.jpg",
+          "scene_2/000.jpg",
+          "scene_1/011.jpg",
+          "scene_2/004.jpg"
+        ]
+      },
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You are given a history of observations<image><image><image><image>, followed by the current observation<image> and the executed action: [turn right 30 degree, forward 25 cm, turn left 15 degree]. Then you are given four candidate next observations in order. Please select the correct option letter from A/B/C/D. Option A: <image>, Option B: <image>, Option C: <image>, Option D: <image>."
+          },
+          {
+            "from": "assistant",
+            "value": "C"
+          }
+        ],
+        "episode_id": "2",
+        "task type": "ffs",
+        "images": [
+          "scene_2/000.jpg",
+          "scene_2/001.jpg",
+          "scene_2/002.jpg",
+          "scene_2/003.jpg",
+          "scene_2/004.jpg",
+          "scene_2/010.jpg",
+          "scene_2/005.jpg",
+          "scene_2/008.jpg",
+          "scene_1/011.jpg"
+        ]
+      },
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You are given a history of observations<image><image><image><image><image><image><image><image>, followed by the current observation<image> and the executed action: [turn right 15 degree, forward 50 cm, turn left 15 degree]. Then you are given four candidate next observations in order. Please select the correct option letter from A/B/C/D. Option A: <image>, Option B: <image>, Option C: <image>, Option D: <image>."
+          },
+          {
+            "from": "assistant",
+            "value": "B"
+          }
+        ],
+        "episode_id": "2",
+        "task type": "ffs",
+        "images": [
+          "scene_2/000.jpg",
+          "scene_2/001.jpg",
+          "scene_2/002.jpg",
+          "scene_2/003.jpg",
+          "scene_2/004.jpg",
+          "scene_2/005.jpg",
+          "scene_2/006.jpg",
+          "scene_2/007.jpg",
+          "scene_2/008.jpg",
+          "scene_2/011.jpg",
+          "scene_2/012.jpg",
+          "scene_1/003.jpg",
+          "scene_2/013.jpg"
+        ]
+      },
+      {
+        "system": "You are a visual language navigation model.",
+        "messages": [
+          {
+            "from": "user",
+            "value": "Imagine you are a robot programmed for navigation tasks. You are given a history of observations<image><image><image><image><image><image><image><image>, followed by the current observation<image> and the executed action: [stop]. Then you are given four candidate next observations in order. Please select the correct option letter from A/B/C/D. Option A: <image>, Option B: <image>, Option C: <image>, Option D: <image>."
+          },
+          {
+            "from": "assistant",
+            "value": "D"
+          }
+        ],
+        "episode_id": "2",
+        "task type": "ffs",
+        "images": [
+          "scene_2/000.jpg",
+          "scene_2/002.jpg",
+          "scene_2/003.jpg",
+          "scene_2/005.jpg",
+          "scene_2/006.jpg",
+          "scene_2/008.jpg",
+          "scene_2/009.jpg",
+          "scene_2/011.jpg",
+          "scene_2/012.jpg",
+          "scene_1/005.jpg",
+          "scene_2/009.jpg",
+          "scene_2/008.jpg",
+          "scene_2/013.jpg"
+        ]
+      }
+    ]
+  }
+}

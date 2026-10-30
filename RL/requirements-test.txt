@@ -1,0 +1,8 @@
+pytest
+httpx>=0.27
+fastapi
+Pillow
+numpy<2
+pyarrow>=19,<26
+hydra-core
+ruff

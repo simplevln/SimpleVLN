@@ -57,5 +57,5 @@ habitat:
   dataset:
     type: R2RVLN-v1
     split: val_unseen
-    scenes_dir: ${oc.env:VLN_DATA_ROOT,./data/vln_data}/scene_datasets/v1/tasks
+    scenes_dir: ${oc.env:VLN_DATA_ROOT,./data/vln_data}/scene_datasets
     data_path: ${oc.env:VLN_DATA_ROOT,./data/vln_data}/eval_data/r2r/{split}/{split}.json.gz
