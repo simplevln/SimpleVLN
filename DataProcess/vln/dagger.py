@@ -1,3 +1,4 @@
+# Adapted from StreamVLN (CC BY-NC-SA 4.0); see THIRD_PARTY_NOTICES.md.
 import os
 import copy
 from contextlib import closing
@@ -160,12 +161,12 @@ class DAggerCollector:
             data_url = self._rgb_to_data_url(np.array(rgb_list[-1]))
             content.append({"type": "image_url", "image_url": {"url": data_url}})
 
-        content.append({"type": "text", "text": "and an image of the current observation"})
+        content.append({"type": "text", "text": " and an image of the current observation"})
         data_url = self._rgb_to_data_url(np.array(rgb_list[-1]))
         content.append({"type": "image_url", "image_url": {"url": data_url}})
 
         instr = instruction if isinstance(instruction, str) else instruction[0]
-        content.append({"type": "text", "text": f" Your assigned task is: '{instr}'. Analyze this series of images to decide your next move, which could involve turning left or right by a specific degree or moving forward a certain distance."})
+        content.append({"type": "text", "text": f". Your assigned task is: '{instr}'. Analyze this series of images to decide your next move, which could involve turning left or right by a specific degree or moving forward a certain distance."})
 
         eval_messages.append({"role": "user", "content": content})
 

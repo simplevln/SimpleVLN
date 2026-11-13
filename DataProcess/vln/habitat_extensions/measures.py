@@ -1,3 +1,4 @@
+# Adapted from StreamVLN (CC BY-NC-SA 4.0); see THIRD_PARTY_NOTICES.md.
 from typing import Any, List, Union, Optional
 from dataclasses import dataclass
 

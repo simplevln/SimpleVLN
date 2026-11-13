@@ -221,6 +221,12 @@ release_rl_data/
     └── vln_train.parquet
 ```
 
+### Data tools
+
+- [DataProcess](DataProcess/README.md): convert trajectory annotations and collect DAgger experience.
+- [RLPipeline](RLPipeline/README.md): sample R2R, RxR and ScaleVLN RL tasks and generate navigation instructions.
+- [eval](eval/README.md): evaluate checkpoints on R2R-CE and RxR-CE.
+
 ### Evaluation data
 
 The R2R-CE and RxR-CE annotations are included under `eval/data/vln_data/`.

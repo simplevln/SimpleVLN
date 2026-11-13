@@ -44,7 +44,7 @@ may be a string, a list of strings, or an object with `instruction_text`.
 Frames are read from `<image_root>/<video_id>/`, optionally under `rgb/`.
 A dataset root containing `images/` may also be used as `--image_root`.
 
-Legacy actions begin with an initial `-1` or numeric `0` sentinel. Executed action
+Raw trajectory actions begin with an initial `-1` or numeric `0` sentinel. Executed action
 IDs are `0` for STOP, `1` for forward, `2` for left, and `3` for right. Forward and
 turn units are 25 cm and 15°. Action sequences must be arrays; each element may
 be a numeric ID, a numeric string, or action text.
@@ -69,7 +69,7 @@ the converter preserves paths derived from `--image_root`.
 
 ## Trajectory Collection
 
-Use Python 3.10 and a separate Habitat environment:
+Trajectory collection runs on Linux. Use Python 3.10 and a separate Habitat environment:
 
 ```bash
 conda create -n simplevln-data python=3.10 -y
@@ -123,8 +123,7 @@ directory when changing the model or collection settings. Saved frames use the
 release layout `<scene>/<episode_id>/rgb/000.jpg`, and the annotation `video`
 field is `<scene>/<episode_id>` with no `images/` prefix. Resuming skips
 completed episodes after checking their latest saved annotations and frames.
-Successful episodes are committed immediately. Merging preserves previously
-saved annotations, including runs where older worker shards have been removed.
+Successful episodes are committed immediately. Merging retains saved annotations, including runs where worker shards are no longer present.
 
 Convert the collected trajectories:
 
@@ -169,7 +168,14 @@ python -m pip install -r requirements-convert.txt 'numpy<2' Pillow
 python -m unittest discover -s tests -v
 ```
 
-The tests cover conversion against fixed reference outputs, frame and action
+The tests cover conversion, frame and action
 alignment, portable paths, collection bookkeeping, and resume behavior. They use
 synthetic trajectories and simulated services; no GPU, private data, or external
 source checkout is required.
+
+## Attribution and Licenses
+
+Collection and measurement components adapted from
+[StreamVLN](https://github.com/InternRobotics/StreamVLN) retain CC BY-NC-SA 4.0;
+Meta-attributed Habitat code retains its MIT notice. See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [LICENSE](LICENSE).

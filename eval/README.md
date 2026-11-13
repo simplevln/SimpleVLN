@@ -233,6 +233,9 @@ The `--save-video` option saves trajectory GIFs for completed trials.
 | Historical observations per request | Up to 8, uniformly sampled |
 | Decoding | Temperature 0.3, top-p 0.95, maximum 512 output tokens |
 
+The system prompt is `You are a visual language navigation model.`
+Request text and image ordering follow `DataProcess/tool/convert_vln.py`.
+
 The current observation is provided alongside the sampled history. On the first
 decision, the initial frame occupies both the history and current-observation
 slots. The evaluator does not select a separate local-history frame.
@@ -282,7 +285,7 @@ NaN/Infinity in the summary.
 python -m unittest discover -s eval/tests -v
 ```
 
-The 20 regression checks cover data preparation, navigation inputs and actions,
+The tests cover data preparation, navigation inputs and actions,
 model serving, result aggregation, and resume. They use mock services and
 simulators; real Habitat execution and checkpoint performance are evaluated
 through the pipeline above.

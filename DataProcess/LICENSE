@@ -1,0 +1,14 @@
+Third-party license scope
+=========================
+
+StreamVLN-derived collection and measurement components identified in
+THIRD_PARTY_NOTICES.md are distributed under Creative Commons
+Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0).
+Full text: LICENSES/CC-BY-NC-SA-4.0.txt.
+License URI: https://creativecommons.org/licenses/by-nc-sa/4.0/
+
+Code bearing the Meta Platforms copyright notice retains its MIT license.
+Full notice and terms: LICENSES/MIT-Habitat.txt.
+
+These notices preserve third-party terms. They do not assign a blanket license
+to unrelated files, input datasets, model weights or generated data.

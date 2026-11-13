@@ -146,6 +146,10 @@ class CollectionTests(unittest.TestCase):
         self.assertEqual(request['messages'][0]['content'][0]['text'], 'You are a visual language navigation model.')
         content = request['messages'][1]['content']
         self.assertEqual(sum(item['type'] == 'image_url' for item in content), 9)
+        import convert_vln
+        prompt = ''.join(item['text'] if item['type'] == 'text' else '<image>' for item in content)
+        self.assertEqual(prompt, convert_vln.build_vln_prompt('go', 9))
+        self.assertEqual(request['messages'][0]['content'][0]['text'], convert_vln.SYSTEM_PROMPT)
         random.seed(7)
         expanded = cls._expand_actions([[1,300],[2,90],[3,15]])
         self.assertEqual(expanded, [1,1,1,2,2,2])

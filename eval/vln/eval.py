@@ -329,10 +329,10 @@ class SimpleVLN_Agent(Agent):
             content.extend([{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encode_image_base64(item)}"}} for item in self.uniform_sample_with_ends(self.rgb_list[:-1],8)])
         else:
             content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encode_image_base64(self.rgb_list[-1])}"}})
-        content.append({"type": "text", "text": 'and an image of the current observation'})
+        content.append({"type": "text", "text": ' and an image of the current observation'})
         content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encode_image_base64(self.rgb_list[-1])}"}})
-        item = self.promt_template.format(observations["instruction"]["text"]).split('current observation.')
-        content.append({"type": "text", "text": item[1]})
+        item = self.promt_template.format(observations["instruction"]["text"]).split('current observation.', 1)
+        content.append({"type": "text", "text": "." + item[1]})
 
 
         self.conversations.append({

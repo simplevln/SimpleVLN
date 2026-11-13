@@ -1,0 +1,4 @@
+{
+  "system": "You are a visual language navigation model.",
+  "template": "Imagine you are a robot programmed for navigation tasks. You have been given a video of historical observations{} and an image of the current observation{}. Your assigned task is: '{}'. Analyze this series of images to decide your next move, which could involve turning left or right by a specific degree or moving forward a certain distance."
+}

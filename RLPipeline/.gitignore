@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.env
+.env.*
+*.log
+nav_graphs/
+_shards/
+_progress*.jsonl
+_label_w*.log
+*.json.gz
+*.parquet
+data/
+
+_traj_shard*
+*.checkpoint.json

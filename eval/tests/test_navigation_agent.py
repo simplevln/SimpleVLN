@@ -79,8 +79,8 @@ class NavigationTests(unittest.TestCase):
                  if item['type'] == 'text']
         self.assertEqual(texts, [
             'Imagine you are a robot programmed for navigation tasks. You have been given a video of historical observations',
-            'and an image of the current observation',
-            " Your assigned task is: 'Go to the door.'. Analyze this series of images to decide your next move, "
+            ' and an image of the current observation',
+            ". Your assigned task is: 'Go to the door.'. Analyze this series of images to decide your next move, "
             'which could involve turning left or right by a specific degree or moving forward a certain distance.',
         ])
         self.assertEqual((first['model'], first['temperature'], first['top_p'],
@@ -89,6 +89,34 @@ class NavigationTests(unittest.TestCase):
                          ['http://server-a/v1', 'http://server-b/v1'] * 2)
         self.assertEqual(self.image_labels(self.requests[-1][1]),
                          ['2', '3', '4', '5', '7', '8', '9', '10', '11'])
+
+    def test_full_prompt_matches_training_converter(self):
+        source = ROOT.parent / 'DataProcess/tool/convert_vln.py'
+        if not source.exists():
+            source = ROOT / 'tests/fixtures/navigation_prompt.json'
+            import json
+            reference = json.loads(source.read_text(encoding='utf-8'))
+            expected_system = reference['system']
+            def build_prompt(instruction, count):
+                return reference['template'].format('<image>' * (count - 1), '<image>', instruction)
+        else:
+            tree = ast.parse(source.read_text(encoding='utf-8'))
+            nodes = [n for n in tree.body if (
+                isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id in
+                    {'SYSTEM_PROMPT', 'VLN_PROMPT_TEMPLATE'} for t in n.targets)) or (
+                isinstance(n, ast.FunctionDef) and n.name == 'build_vln_prompt')]
+            ns = {}
+            exec(compile(ast.Module(body=nodes, type_ignores=[]), '<training-prompt>', 'exec'), ns)
+            expected_system, build_prompt = ns['SYSTEM_PROMPT'], ns['build_vln_prompt']
+        for frame in range(12):
+            self.act(frame)
+            request = self.requests[-1][1]
+            system = ''.join(x['text'] for x in request['messages'][0]['content'])
+            parts = request['messages'][1]['content']
+            prompt = ''.join(x['text'] if x['type'] == 'text' else '<image>' for x in parts)
+            count = sum(x['type'] == 'image_url' for x in parts)
+            self.assertEqual(system, expected_system)
+            self.assertEqual(prompt, build_prompt('Go to the door.', count))
 
     def test_actions_are_limited_and_pending_actions_avoid_extra_requests(self):
         self.output = '<think>plan\nnext move</think>forward 150 cm, left 30 degrees, right 90 degrees'
