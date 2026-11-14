@@ -3,7 +3,7 @@
 Standalone inference uses the environment's JPEG buffers in data URLs. The
 training interface uses decoded PIL images and the model's multimodal processor.
 """
-SYSTEM_PROMPT = "You are a helpful assistant."
+SYSTEM_PROMPT = "You are a visual language navigation model."
 
 PROMPT_TEMPLATE = (
     "Imagine you are a robot programmed for navigation tasks. "
