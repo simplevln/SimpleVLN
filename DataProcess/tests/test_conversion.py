@@ -1,3 +1,5 @@
+"""Regression tests for navigation sample conversion and supported CLI options."""
+
 import json
 from pathlib import Path
 import random

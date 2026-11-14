@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# Label sampled routes using dataset-specific references and waypoint observations.
 """Write instructions and pack them back into the trajectory files.
 
 The fixed prompt is prompt.txt. Same house, at most eight style lines:

@@ -1,3 +1,5 @@
+"""Convert navigation demonstrations into visual instruction-following samples."""
+
 import argparse
 import copy
 import random

@@ -1,3 +1,5 @@
+"""Regression tests for collection requests, executed actions, and saved trajectories."""
+
 import ast
 import base64
 from contextlib import closing, redirect_stdout

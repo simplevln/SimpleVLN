@@ -1,3 +1,5 @@
+"""Shared annotation loading, action alignment, and output utilities."""
+
 """Shared annotation, frame and action validation for the converters."""
 import json
 import os

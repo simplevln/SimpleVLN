@@ -140,6 +140,10 @@ including expert interventions. It writes one JSON file at `--output_path` and
 does not require model-call groups. The standard converter produces only VLN
 navigation samples and has no task-selection option.
 
+When updating existing commands, omit `--task_type` and use `--mode atomic`
+(or omit `--mode`). Point the training loader to the exact `--output_path`;
+the converter does not add a mode suffix to the filename.
+
 ### Camera Poses
 
 The pose tool replays raw trajectories and writes `poses.npy` and `intrinsics.npy`

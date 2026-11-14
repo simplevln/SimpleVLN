@@ -235,5 +235,6 @@
         ]
       }
     ]
-  }
+  },
+  "description": "Synthetic navigation trajectories and expected exported samples for conversion regression tests."
 }

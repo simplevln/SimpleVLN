@@ -1,4 +1,4 @@
-# Role
+# Navigation annotation role
 You are a navigation data annotation assistant.
 
 You are given a first-person navigation route within one scene. The route is divided into nodes, each providing:

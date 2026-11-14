@@ -1,3 +1,5 @@
+"""Regression tests for concurrent collection journals and resumable outputs."""
+
 from contextlib import redirect_stdout
 import io
 import json

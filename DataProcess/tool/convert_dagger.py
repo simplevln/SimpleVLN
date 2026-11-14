@@ -1,3 +1,5 @@
+"""Convert collected DAgger trajectories into atomic navigation training samples."""
+
 import argparse
 import random
 

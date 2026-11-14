@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Sample trajectories, then pack them.
+"""Sample navigation trajectories and package them by dataset.
 
   python3 sample.py mp3d   ...
   python3 sample.py merge  ...

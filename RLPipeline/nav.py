@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Simulator, navigation graph, and the waypoint views used when writing instructions."""
+"""Simulator utilities, navigation graphs, and waypoint views for instruction generation."""
 import heapq
 import math
 import os
