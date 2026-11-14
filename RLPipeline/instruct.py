@@ -32,10 +32,10 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 DATA_ROOT = os.environ.get("VLN_DATA", "/root/code/data")
 PROMPT_BASE = open(os.path.join(_HERE, "prompt.txt"), encoding="utf-8").read().strip()
 IMG_W, IMG_H = 640, 480
-TAIL = "\n\n---\n\n# 现在处理这条\n\n输入："
+TAIL = "\n\n---\n\n# Process this route\n\nInput:"
 STYLE_HINT = (
-    "\n\n先通读上面的同场景数据集参考，体会它们的标注地标风格用词、地标选择、方向与停止位置的描述风格；"
-    "生成时一边参考这种风格一边落笔，使这条指令读起来像同场景的参考标注（学风格，不照抄具体内容）。"
+    "\n\nFirst read the same-scene dataset references above, noting their wording, landmark selection, directions, and stopping descriptions. "
+    "Follow that style while writing this instruction so it reads like a same-scene reference annotation; learn the style without copying its content."
 )
 
 def dataset_spec(name, data_root):
@@ -52,7 +52,7 @@ def dataset_spec(name, data_root):
                          sim="hm3d", mode="rgb", refs="scalevln"),
     }
     if name not in specs:
-        raise SystemExit(f"dataset 只能是 {', '.join(specs)}")
+        raise SystemExit(f"dataset must be one of {', '.join(specs)}")
     return specs[name]
 
 
@@ -69,7 +69,7 @@ def instr_text(ep):
 
 
 def load_levels(src):
-    """返回 [(lvl, rl_dict, gt_dict)]。根目录或 lvl_* 子目录都可以。"""
+    """Return [(lvl, rl_dict, gt_dict)] from a root directory or lvl_* subdirectories."""
     if os.path.exists(os.path.join(src, "rl.json.gz")):
         dirs = [src]
     else:
@@ -86,7 +86,7 @@ def load_levels(src):
             gt = json.load(f)
         out.append((lvl, rl, gt))
     if not out:
-        raise SystemExit(f"在 {src} 没找到 rl.json.gz + rl_gt.json.gz")
+        raise SystemExit(f"In {src}, no rl.json.gz + rl_gt.json.gz pair was found")
     return out
 
 
@@ -102,7 +102,7 @@ def index_episodes(levels):
 
 
 def load_corpus_refs(data_root, rels):
-    """同一栋房子的风格句。rels 按顺序用第一个存在的文件。带 language 时只留英文。"""
+    """Load same-house style references from the first existing path in rels; keep English entries when language is specified."""
     path = None
     for rel in rels:
         cand = rel if os.path.isabs(rel) else os.path.join(data_root, "datasets", rel)
@@ -111,7 +111,7 @@ def load_corpus_refs(data_root, rels):
             break
     refs = defaultdict(list)
     if path is None:
-        print(f"[refs] 没有 {' / '.join(rels)}，同场景参考留空", flush=True)
+        print(f"[refs] Missing {' / '.join(rels)}; same-scene references will be empty", flush=True)
         return refs
     with gzip.open(path, "rt") as f:
         episodes = json.load(f)["episodes"]
@@ -124,7 +124,7 @@ def load_corpus_refs(data_root, rels):
         text = instr_text(ep)
         if text:
             refs[scene_key(ep["scene_id"])].append(text)
-    print(f"[refs] {path}  {sum(len(v) for v in refs.values())} 条 / {len(refs)} 场景", flush=True)
+    print(f"[refs] {path}  {sum(len(v) for v in refs.values())} instructions / {len(refs)} scenes", flush=True)
     return refs
 
 
@@ -147,9 +147,9 @@ def header_for(scene, self_ref, refs, k=8):
         picked.append(text)
         if len(picked) >= k:
             break
-    block = "\n".join(f"- {t}" for t in picked) if picked else "(该场景暂无可用数据集参考)"
+    block = "\n".join(f"- {t}" for t in picked) if picked else "(No dataset references available for this scene)"
     return (PROMPT_BASE
-            + "\n\n# 同场景数据集参考（仅学习表达风格，不可照抄）\n"
+            + "\n\n# Same-scene dataset references (learn the style; do not copy)\n"
             + block + STYLE_HINT + TAIL)
 
 
@@ -173,7 +173,7 @@ def node_text(node):
 
 
 def simple_nodes(gt, turn_thresh=30.0, step_deg=15.0, fwd_seg=8):
-    """没有语义时按 GT 动作切节点。净转角不到阈值的左右摆动丢掉。"""
+    """Split nodes by GT actions when semantics are unavailable; ignore turns below the net-angle threshold."""
     actions = gt["actions"]
     nodes = [{"step": 0, "Action": "Start", "Location": "unknown"}]
     net, fwd = [0.0], [0]
@@ -293,7 +293,7 @@ def build_content(sim, ep, gt, maps, id2label, header, turn_deg, use_instances):
         frame_ids = [max(0, step - 2), max(0, step - 1), step] if i == len(nodes) - 1 else [step]
         for fid in frame_ids:
             content.append(img_msg(frames[min(fid, k)]))
-    content.append({"type": "text", "text": "\n输出："})
+    content.append({"type": "text", "text": "\nOutput:"})
     return content, len(nodes)
 
 
@@ -371,7 +371,7 @@ def open_sim(sim_kind, scene, gpu, need_sem, hm3d_root, data_root=None):
     sim = habitat_sim.Simulator(cfg)
     if navs and not sim.pathfinder.is_loaded:
         sim.pathfinder.load_nav_mesh(navs[0])
-    # HM3D 这份配置只有 RGB。ScaleVLN 按 rgb 打标；就算指定 instance，也退回动作切节点。
+    # This HM3D configuration has RGB only. ScaleVLN uses action-based nodes even when instance mode is requested.
     return sim, None, None
 
 
@@ -380,7 +380,7 @@ def label(args):
     base_url = os.environ.get("VLM_BASE_URL", "").strip()
     model = os.environ.get("VLM_MODEL", "").strip()
     if not key or not base_url or not model:
-        raise SystemExit("先设置 VLM_API_KEY、VLM_BASE_URL、VLM_MODEL")
+        raise SystemExit("Set VLM_API_KEY, VLM_BASE_URL, and VLM_MODEL first")
     spec = dataset_spec(args.dataset, args.data_root)
     src = args.src or spec["src"]
     out = args.out or spec["out"]
@@ -409,7 +409,7 @@ def label(args):
     gpu = int(os.environ.get("GPU_ID", args.gpu))
     hm3d_root = os.path.join(args.data_root, "scene_datasets", "hm3d")
     prog = os.path.join(out, "_progress.jsonl" if worker < 0 else f"_progress.w{worker}.jsonl")
-    print(f"[label {args.dataset}] {total} eps / {len(by_scene)} 场景, 已完成 {len(done)}, "
+    print(f"[label {args.dataset}] {total} eps / {len(by_scene)} scenes, completed {len(done)}, "
           f"mode={mode}, turn_deg={args.turn_deg}, worker={worker}/{nworkers}", flush=True)
 
     scenes = sorted(by_scene, key=lambda s: -len(by_scene[s]))
@@ -425,15 +425,15 @@ def label(args):
                 pending = pending[:args.limit]
             if not pending:
                 continue
-            print(f"[scene {si + 1}/{len(scenes)}] {scene}: {len(pending)} 待生成", flush=True)
+            print(f"[scene {si + 1}/{len(scenes)}] {scene}: {len(pending)} pending", flush=True)
             try:
                 sim, maps, id2label = open_sim(spec["sim"], scene, gpu, use_instances, hm3d_root, args.data_root)
             except Exception:
                 n_err += len(pending)
-                print(f"  [{scene}] 打不开场景\n{traceback.format_exc()[-400:]}", flush=True)
+                print(f"  [{scene}] Cannot open scene\n{traceback.format_exc()[-400:]}", flush=True)
                 continue
             if use_instances and maps is None:
-                print(f"  [{scene}] 没有语义，这条场景改看 RGB", flush=True)
+                print(f"  [{scene}] No semantics; using RGB for this scene", flush=True)
             try:
                 for start in range(0, len(pending), args.batch):
                     chunk = pending[start:start + args.batch]
@@ -517,7 +517,7 @@ def assemble(args):
             level_gt[new_id] = _gt[old_id]
             all_gt[new_id] = _gt[old_id]
         all_eps.extend(rl["episodes"])
-        print(f"  组装 {lvl or '.'}: {len(rl['episodes'])} eps", flush=True)
+        print(f"  Assemble {lvl or '.'}: {len(rl['episodes'])} eps", flush=True)
     # Rebuild tokens after text replacement, with one vocabulary per dataset.
     if any("instruction_tokens" in ep["instruction"] for ep in all_eps):
         vocab = {"word_list": nav.fill_vocab(all_eps)}
@@ -534,7 +534,7 @@ def assemble(args):
         json.dump({"episodes": all_eps, "instruction_vocab": vocab}, f, ensure_ascii=False)
     with gzip.open(os.path.join(out, "rl_all_gt.json.gz"), "wt") as f:
         json.dump(all_gt, f, ensure_ascii=False)
-    print(f"[assemble] {out}  替换 {n_ok}, 保留原指令 {n_keep}, 合计 {len(all_eps)}", flush=True)
+    print(f"[assemble] {out}  replaced {n_ok}, retained source instructions {n_keep}, total {len(all_eps)}", flush=True)
 
 
 def launch(args):
@@ -566,28 +566,28 @@ def launch(args):
     print(f"[launch] {args.workers} workers, {n_gpu} gpu", flush=True)
     codes = [p.wait() for p in procs]
     if any(codes):
-        raise SystemExit(f"worker 退出码 {codes}")
+        raise SystemExit(f"worker exit codes {codes}")
 
 
 def main():
-    ap = argparse.ArgumentParser(description="R2R / RxR / ScaleVLN 指令打标")
+    ap = argparse.ArgumentParser(description="R2R / RxR / ScaleVLN instruction labeling")
     sub = ap.add_subparsers(dest="cmd", required=True)
     common = dict(dataset={"choices": ["r2r", "rxr", "scalevln"], "required": True})
     for name in ("label", "assemble"):
         p = sub.add_parser(name)
         p.add_argument("--dataset", **common["dataset"])
         p.add_argument("--data-root", default=DATA_ROOT)
-        p.add_argument("--src", default="", help="覆盖默认轨迹目录")
-        p.add_argument("--out", default="", help="覆盖默认输出目录")
+        p.add_argument("--src", default="", help="Override the default trajectory directory")
+        p.add_argument("--out", default="", help="Override the default output directory")
         p.add_argument("--mode", default="", choices=["", "instance", "rgb"])
         p.add_argument("--turn-deg", type=int, default=45)
     lab = sub.choices["label"]
     lab.add_argument("--workers", type=int, default=1)
-    lab.add_argument("--worker", type=int, default=-1, help="由 launch 传入，单进程不要设")
+    lab.add_argument("--worker", type=int, default=-1, help="Set by launch; leave unset for a single process")
     lab.add_argument("--conc", type=int, default=8)
     lab.add_argument("--batch", type=int, default=40)
     lab.add_argument("--gpu", type=int, default=0)
-    lab.add_argument("--limit", type=int, default=0, help="每个场景最多打几条，0 表示不限")
+    lab.add_argument("--limit", type=int, default=0, help="Maximum labels per scene; 0 means unlimited")
     args = ap.parse_args()
     if args.cmd == "assemble":
         assemble(args)

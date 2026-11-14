@@ -15,15 +15,15 @@ from scipy.spatial.distance import pdist
 import habitat_sim
 import habitat_sim.utils.common as hsc
 
-# ----------------------------- 常量 -----------------------------
+# ----------------------------- Constants -----------------------------
 DATA = os.environ.get("VLN_DATA", "/root/code/data")
 SCENES_DIR = os.path.join(DATA, "scene_datasets", "mp3d")
 GRAPH_DIR = "./nav_graphs"
-FORWARD_STEP = 0.25          # 米/步
-TURN_ANGLE = 15              # 度/步
-# HabitatSimActions 标准编码 (与 R2R gt 对齐)
+FORWARD_STEP = 0.25          # meters per step
+TURN_ANGLE = 15              # degrees per step
+# Standard HabitatSimActions IDs, aligned with R2R GT
 ACT = {"stop": 0, "move_forward": 1, "turn_left": 2, "turn_right": 3}
-ACTION_ID = ACT             # 别名
+ACTION_ID = ACT             # Alias
 STRUCT = {"wall", "floor", "ceiling", "misc", "void", "objects", "column",
           "beam", "board_panel", "unlabeled", "railing", "door", "window"}
 
@@ -32,9 +32,9 @@ def scene_path(scene):
     return os.path.join(SCENES_DIR, scene, f"{scene}.glb")
 
 
-# ----------------------------- Simulator 配置 -----------------------------
+# ----------------------------- Simulator configuration -----------------------------
 def make_cfg(scene_glb, with_rgb=False):
-    """普通 agent: 前进0.25/转15 动作空间; with_rgb 时挂一个第一视角 RGB。"""
+    """Configure 0.25 m forward and 15 degree turns; optionally attach a first-person RGB sensor."""
     sim_cfg = habitat_sim.SimulatorConfiguration()
     sim_cfg.scene_id = scene_glb
     sim_cfg.enable_physics = False
@@ -58,7 +58,7 @@ def make_cfg(scene_glb, with_rgb=False):
 
 
 def make_ortho_cfg(scene_glb, w_px, h_px, mpp):
-    """正交俯视相机, ortho_scale = 米/像素。"""
+    """Orthographic top-down camera; ortho_scale is meters per pixel."""
     sim_cfg = habitat_sim.SimulatorConfiguration()
     sim_cfg.scene_id = scene_glb
     sim_cfg.enable_physics = False
@@ -71,7 +71,7 @@ def make_ortho_cfg(scene_glb, w_px, h_px, mpp):
     return habitat_sim.Configuration(sim_cfg, [ag])
 
 
-# ----------------------------- 几何 / 寻路 -----------------------------
+# ----------------------------- Geometry / pathfinding -----------------------------
 def euclid(a, b):
     return float(np.linalg.norm(np.asarray(a) - np.asarray(b)))
 
@@ -82,7 +82,7 @@ def geo(pf, a, b):
 
 
 def geo_path(pf, a, b):
-    """返回 (geodesic, points[list np]); 不可达返回 (inf, None)。"""
+    """Return (geodesic, points[list np]); return (inf, None) if unreachable."""
     sp = habitat_sim.ShortestPath(); sp.requested_start = a; sp.requested_end = b
     if pf.find_path(sp):
         return sp.geodesic_distance, [np.array(p, np.float32) for p in sp.points]
@@ -90,7 +90,7 @@ def geo_path(pf, a, b):
 
 
 def dijkstra(adj, src, dst, blocked=()):
-    """加权最短路; blocked 为屏蔽节点集 (端点除外)。adj[u]=[(v,w),...]。"""
+    """Weighted shortest path; blocked excludes endpoints. adj[u] = [(v, w), ...]."""
     bl = set(blocked) - {src, dst}
     dist = {src: 0.0}; prev = {}; pq = [(0.0, src)]
     while pq:
@@ -124,12 +124,8 @@ def bfs_rooms(radj, src):
 
 
 def random_room_chain(radj, s_room, g_room, rng, extra=3, detour_prob=0.5, max_total=8):
-    """房间图上从 s_room 有偏随机游走到 g_room, 允许绕路/重复经过房间。
-    替代 BFS 最短路: 一对(start,goal)能生成多条结构不同的房间链 -> 组合数与多样性大增,
-    单场景容量翻几倍。extra=最短跳数外额外绕路预算; detour_prob=每步走非最短邻居的概率;
-    max_total=链总房间数上限(防步数爆). detour_prob=0 退化为最短路。
-    返回房间序列 [s_room,...,g_room](可含重复); 不连通/到不了返回 None。"""
-    dg = {g_room: 0}; q = deque([g_room])          # 到 g_room 的最短跳数, 用于导航保证可达
+    """Biased random walk from s_room to g_room, allowing detours and repeated rooms. extra budgets additional hops beyond the shortest path; detour_prob controls non-shortest neighbor selection; max_total limits the room count. With detour_prob=0, follow the shortest path. Return a room sequence or None if unreachable."""
+    dg = {g_room: 0}; q = deque([g_room])          # Shortest hop counts to g_room ensure reachability
     while q:
         u = q.popleft()
         for v in radj[u]:
@@ -137,19 +133,19 @@ def random_room_chain(radj, s_room, g_room, rng, extra=3, detour_prob=0.5, max_t
                 dg[v] = dg[u] + 1; q.append(v)
     if s_room not in dg:
         return None
-    budget = dg[s_room] + int(rng.integers(0, extra + 1))   # 允许走的总步数(含绕路)
+    budget = dg[s_room] + int(rng.integers(0, extra + 1))   # Total allowed hops, including detours
     chain = [s_room]; cur = s_room
     while cur != g_room and len(chain) < max_total:
         nbrs = [v for v in radj[cur] if v in dg]
         if not nbrs:
             return None
-        remain = max_total - len(chain)                    # 还剩几步能走
-        feas = [v for v in nbrs if dg[v] < remain] or nbrs # 留得下回 g 的步数
+        remain = max_total - len(chain)                    # Remaining hop budget
+        feas = [v for v in nbrs if dg[v] < remain] or nbrs # Reserve enough hops to reach the goal
         if len(chain) - 1 >= budget or rng.random() >= detour_prob:
-            mn = min(dg[v] for v in feas)                  # 超预算/不绕 -> 朝 goal
+            mn = min(dg[v] for v in feas)                  # No detour or exhausted budget: approach the goal
             cur = int(rng.choice([v for v in feas if dg[v] == mn]))
         else:
-            cur = int(rng.choice(feas))                    # 绕路 -> 随机可行邻居
+            cur = int(rng.choice(feas))                    # Detour: choose a random feasible neighbor
         chain.append(cur)
     return chain if cur == g_room else None
 
@@ -178,7 +174,7 @@ def turn_word(prev_h, cur_h):
 
 
 def path_to_actions(nodes, seq, detour_edge=None, start_yaw=None):
-    """节点序列 -> [(type, value, is_detour)] (转向角 + 前进米)。"""
+    """Convert a node sequence to [(type, value, is_detour)] with turn degrees and forward meters."""
     acts = []
     cur = heading(nodes[seq[0]], nodes[seq[1]]) if start_yaw is None else start_yaw
     for i in range(len(seq) - 1):
@@ -197,24 +193,22 @@ def path_to_actions(nodes, seq, detour_edge=None, start_yaw=None):
 
 
 class Dedup:
-    """去重: ①vs 数据集(start,goal 6D KDTree) ②vs 已生成(start/goal 格点)
-    ③goal 空间分散(已用 goal 1.5m 内限选 max_per_goal 次) ④轨迹重合(RDP指纹格点重叠率)。
-    一场景一实例 -> 零跨进程共享, 天然并行。"""
+    """Deduplicate against dataset endpoints (6D KDTree), generated endpoint grids, nearby goals (max_per_goal within 1.5 m), and trajectory overlap (RDP grid fingerprints). One instance per scene; no cross-process state."""
     def __init__(self, pairs, ts=1.5, tg=1.5, cell=1.0,
                  goal_spread=1.5, max_per_goal=8, start_diverse=2.0,
                  path_overlap=0.8, path_cell=1.0, endpoint_dedup=True, dataset_dedup=None):
         self.ts, self.tg, self.cell = ts, tg, cell
-        self.endpoint_dedup = endpoint_dedup   # ②③: 关=允许自己同起终点多路径(只靠④轨迹重合判重)
-        # ①: 是否避开传入的 pairs(真实 R2R/RxR 端点); 默认跟随 endpoint_dedup, 可单独打开
+        self.endpoint_dedup = endpoint_dedup   # Disable endpoint and goal-density checks to allow distinct paths sharing endpoints
+        # Check input pairs independently; defaults to endpoint_dedup
         self.dataset_dedup = endpoint_dedup if dataset_dedup is None else dataset_dedup
-        # goal 可复用, 但: 每个 goal 区域最多 max_per_goal 条, 且复用时 start 要离已有 >start_diverse
+        # Reuse a goal at most max_per_goal times, with starts separated by start_diverse
         self.goal_spread, self.max_per_goal, self.start_diverse = goal_spread, max_per_goal, start_diverse
         self.path_overlap, self.path_cell = path_overlap, path_cell
         self.pts = (np.array([np.concatenate([np.asarray(s, np.float32), np.asarray(g, np.float32)])
                               for s, g in pairs], np.float32) if pairs else np.empty((0, 6), np.float32))
         self.tree = cKDTree(self.pts) if len(self.pts) else None
         self.seen = set()                 # (start_cell, goal_cell)
-        self.by_goal = []                 # [(goal_pos, [start_pos,...])] 每个 goal 用过的 start
+        self.by_goal = []                 # [(goal_pos, [start_pos, ...])] records starts used for each goal
         self.path_fps = []
 
     def _key(self, start, goal):
@@ -226,7 +220,7 @@ class Dedup:
 
     def is_dup(self, start, goal, traj=None):
         start = np.asarray(start, np.float32); goal = np.asarray(goal, np.float32)
-        # ① vs 数据集(真实 R2R/RxR forbidden 端点); 独立开关 -> waypoint 模式也能避开真实数据
+        # Independent dataset endpoint checks also apply in waypoint mode
         if self.dataset_dedup and self.tree is not None:
             p6 = np.concatenate([start, goal])
             for idx in self.tree.query_ball_point(p6, r=(self.ts ** 2 + self.tg ** 2) ** 0.5):
@@ -234,17 +228,17 @@ class Dedup:
                 if np.linalg.norm(q[:3] - start) < self.ts and np.linalg.norm(q[3:] - goal) < self.tg:
                     return True
         if self.endpoint_dedup:
-            # ② vs 已生成端点
+            # Compare with generated endpoints
             if self._key(start, goal) in self.seen:
                 return True
-            # ③ goal 可复用, 但同一 goal 区域: 不超 max_per_goal 条, 且新 start 要离已有 start 够远(换方向)
+            # Limit reuse per goal region and require sufficiently separated starts
             for g, starts in self.by_goal:
                 if np.linalg.norm(g - goal) < self.goal_spread:
                     if len(starts) >= self.max_per_goal:
                         return True
                     if any(np.linalg.norm(np.asarray(s) - start) < self.start_diverse for s in starts):
-                        return True            # start 太近 = 同方向逼近, 弃
-        # ④ 轨迹与已有重合过高
+                        return True            # Reject nearby starts approaching from the same direction
+        # Reject excessive overlap with existing trajectories
         if traj is not None and self.path_fps:
             fp = self._fp(traj)
             for ofp in self.path_fps:
@@ -265,7 +259,7 @@ class Dedup:
 
 
 def densify(pf, pts, step=0.25):
-    """相邻点之间用 navmesh 测地折线补点 (贴墙绕角); step>0 时再按固定弧长重采样 -> 平滑稠密。"""
+    """Densify between points along navmesh geodesics; optionally resample at fixed arc-length intervals when step > 0."""
     pts = [np.asarray(p, np.float32) for p in pts]
     out = []
     for a, b in zip(pts[:-1], pts[1:]):
@@ -290,22 +284,20 @@ def densify(pf, pts, step=0.25):
     return np.array(res, np.float32)
 
 
-# 挂墙/天花板/嵌入类物体: 选作 goal 必不可达, 排除
+# Exclude wall-mounted, ceiling-mounted, and embedded objects as unreachable goals
 WALL_OBJECTS = {"picture", "mirror", "tv_monitor", "window", "curtain", "blinds",
                 "lighting", "clock", "painting", "shelving", "panel", "fireplace",
                 "air_vent", "switch", "board_panel", "beam", "column"}
 
 
 def reachable_goal(pf, obj_center, ring=(0.6, 1.0, 1.5), n_dir=8, clearance=0.2):
-    """在物体中心周围一圈找可走点作 goal (站在物体旁看它)。
-    物体中心本身常在几何内部不可走 -> 不直接 snap 中心, 而是外扩取环上点。
-    返回可走点或 None。"""
+    """Find a navigable goal near an object using concentric rings; object centers may lie inside geometry. Return a navigable point or None."""
     c = np.asarray(obj_center, np.float32)
-    # 先试中心 snap (小物体/开阔处直接可用)
+    # Try snapping the center first for small objects or open areas
     s = pf.snap_point(c)
     if not np.any(np.isnan(s)) and pf.is_navigable(s) and np.linalg.norm(s - c) < 1.0:
         return np.asarray(s, np.float32)
-    # 否则在水平环上找最近可走点
+    # Otherwise find a nearby navigable point on horizontal rings
     best, bd = None, 1e9
     for rad in ring:
         for k in range(n_dir):
@@ -316,16 +308,16 @@ def reachable_goal(pf, obj_center, ring=(0.6, 1.0, 1.5), n_dir=8, clearance=0.2)
                 continue
             if pf.distance_to_closest_obstacle(p) < clearance:
                 continue
-            d = abs(np.linalg.norm(np.asarray(p) - c) - rad)   # 离目标环最贴的
+            d = abs(np.linalg.norm(np.asarray(p) - c) - rad)   # Distance from the target ring
             if d < bd:
                 bd, best = d, np.asarray(p, np.float32)
         if best is not None:
-            return best                       # 最内环找到就用 (离物体最近)
+            return best                       # Use the innermost successful ring, closest to the object
     return best
 
 
 def rdp(pts, eps=0.5):
-    """Ramer-Douglas-Peucker 折线简化 (xz 平面), 返回保留点索引。去碎转。"""
+    """Ramer-Douglas-Peucker simplification in the xz plane; return retained indices."""
     pts = np.asarray(pts)
     if len(pts) < 3:
         return list(range(len(pts)))
@@ -348,11 +340,7 @@ def rdp(pts, eps=0.5):
 
 
 def resample_waypoints(locs, anchors, step=1.8, min_pts=5):
-    """从密集轨迹 locs(走过的每帧位置) 生成 reference_path waypoint。
-    以 RDP 角点 anchors 为分段锚(保留转弯结构), 每段再按弧长 ~step 均匀插点,
-    使相邻 waypoint 间距 <= step(贴近原始 R2R/RxR ~1.8m 采样密度); 角点附近自然更密。
-    若点数仍 < min_pts(短轨迹) 则全程按更细步长兜底重采样, 禁止退化成 2 点。
-    返回 list[[x,y,z]]。"""
+    """Build reference_path from dense frame positions. Preserve RDP corner anchors and resample each segment at approximately step spacing (about 1.8 m for R2R/RxR). If fewer than min_pts remain, resample the full path more densely to avoid two-point paths. Return list[[x, y, z]]."""
     locs = np.asarray(locs, np.float32)
     if len(locs) < 2:
         return [p.tolist() for p in locs]
@@ -361,7 +349,7 @@ def resample_waypoints(locs, anchors, step=1.8, min_pts=5):
         d = np.linalg.norm(np.diff(seg, axis=0), axis=1)
         cum = np.concatenate([[0.0], np.cumsum(d)])
         L = cum[-1]
-        n = max(1, int(round(L / st)))            # 该段切成 n 份
+        n = max(1, int(round(L / st)))            # Split this segment into n intervals
         res = []
         for k in range(1, n + 1):
             s = L * k / n
@@ -374,12 +362,12 @@ def resample_waypoints(locs, anchors, step=1.8, min_pts=5):
     pts = [locs[anchors[0]]]
     for a, b in zip(anchors[:-1], anchors[1:]):
         pts.extend(_seg_resample(locs[a:b + 1], step))
-    # 去掉过近重复点
+    # Remove near-duplicate points
     out = [pts[0]]
     for p in pts[1:]:
         if np.linalg.norm(p - out[-1]) > 1e-2:
             out.append(p)
-    # 兜底: 不足 min_pts 时全程均匀重采样到 min_pts 个点
+    # Fallback: uniformly resample to min_pts when necessary
     if len(out) < min_pts:
         d = np.linalg.norm(np.diff(locs, axis=0), axis=1)
         cum = np.concatenate([[0.0], np.cumsum(d)])
@@ -424,7 +412,7 @@ def yaw_quat(yaw):
     return [float(q.x), float(q.y), float(q.z), float(q.w)]
 
 
-# ----------------------------- 导航图 (ScaleVLN 式) -----------------------------
+# ----------------------------- Navigation graph (ScaleVLN style) -----------------------------
 def dense_sample(pf, n_target, min_sep, seed):
     pf.seed(seed)
     pts, tree_pts, attempts = [], np.empty((0, 3)), 0
@@ -491,7 +479,7 @@ def largest_component(n, edges):
 
 def build_nav_graph(pf, seed, min_sep=0.4, cluster_thresh=1.0, connect_radius=5.0,
                     max_degree=5, edge_straight=1.1, oversample=2.0):
-    """从 pathfinder 直接构图, 返回 (nodes[Nx3], edges[[i,j],...])。"""
+    """Build a graph from the pathfinder; return (nodes[Nx3], edges[[i, j], ...])."""
     n_target = int(pf.navigable_area / (min_sep ** 2) * oversample)
     pts = dense_sample(pf, n_target, min_sep, seed)
     nodes = cluster_nodes(pts, cluster_thresh, pf)
@@ -519,9 +507,9 @@ def load_or_build_graph(sim, scene, seed, graph_dir=GRAPH_DIR):
     return nodes, edges
 
 
-# ----------------------------- 语义 (房间 + 物体) -----------------------------
+# ----------------------------- Semantics (rooms + objects) -----------------------------
 def load_regions(sim, with_objects=False):
-    """返回房间 dict 列表: {name, c, lo, hi, objs}。objs=[(类别,中心xyz)] (with_objects 时)。"""
+    """Return room dictionaries {name, c, lo, hi, objs}; objs contains (category, center_xyz) when with_objects is enabled."""
     regs = []
     for r in sim.semantic_scene.regions:
         name = r.category.name() if r.category else "?"
@@ -582,7 +570,7 @@ def nearest_landmark(p, regs, room_idx, exclude=()):
 
 
 def split_floors(nodes, gap=1.0, min_nodes=5):
-    """按 y 把节点分楼层; 碎层(<min_nodes)并入最近主层。返回 (floor_of[N], {主层->中位y})。"""
+    """Group nodes into floors by y; merge small groups into the nearest major floor. Return (floor_of[N], {floor: median_y})."""
     ys = np.sort(nodes[:, 1])
     centers = [ys[0]]
     for y in ys[1:]:
@@ -599,9 +587,9 @@ def split_floors(nodes, gap=1.0, min_nodes=5):
     return floor_of, {m: float(np.median(nodes[floor_of == m, 1])) for m in main}
 
 
-# ----------------------------- 正交俯视渲染 -----------------------------
+# ----------------------------- Orthographic top-down rendering -----------------------------
 def render_topdown(scene_glb, floor_y, bounds, mpp=0.04, cam_up=1.8, max_px=1600):
-    """渲染某楼层纹理俯视图, 返回 (rgb, to_px, w, h)。to_px(p)->(col,row)。"""
+    """Render a textured floor view; return (rgb, to_px, w, h), where to_px(p) gives (column, row)."""
     lo, hi = np.array(bounds[0]), np.array(bounds[1])
     cx, cz = (lo[0] + hi[0]) / 2, (lo[2] + hi[2]) / 2
     w = min(max_px, int(math.ceil((hi[0] - lo[0]) / mpp)) + 20)
@@ -618,9 +606,9 @@ def render_topdown(scene_glb, floor_y, bounds, mpp=0.04, cam_up=1.8, max_px=1600
     return rgb, to_px, w, h
 
 
-# ----------------------------- follower 走轨迹 -----------------------------
+# ----------------------------- Follower trajectories -----------------------------
 def walk_follower(sim, follower, agent, start, yaw, waypoints):
-    """沿 waypoints 用 greedy follower 走, 返回 (actions[int], locations[xyz])。"""
+    """Follow waypoints with a greedy follower; return (actions[int], locations[xyz])."""
     st = agent.get_state()
     st.position = np.array(start, np.float32)
     st.rotation = hsc.quat_from_angle_axis(yaw, np.array([0.0, 1.0, 0.0]))
@@ -641,12 +629,7 @@ def walk_follower(sim, follower, agent, start, yaw, waypoints):
 
 
 def walk_pathfollow(sim, follower, agent, start, yaw, waypoints, pf=None):
-    """快通道: 与 walk_follower 同签名/同返回, 但不调用昂贵的 greedy follower 规划。
-    先用 pathfinder.find_path 拿每段 navmesh 测地折线(C++, 一次调用), 再用便宜的几何控制
-    (朝目标顶点转 15°/前进 0.25)驱动 sim.step。**动作与位置仍来自 sim.step -> 自洽**(replay
-    可复现), 只把 O(贵) 的 next_action_along 换成 O(便宜) 的角度判断。约 13x 墙钟。
-    转向符号用 sim 真实朝向向量(quat_rotate_vector)算, 不假设 yaw 约定; 符号错也只多转不出错。
-    pf 缺省用 sim.pathfinder。follower 参数仅为签名对齐, 不使用。"""
+    """Fast alternative with the walk_follower signature: obtain navmesh path vertices, then drive sim.step with geometric control (15 degree turns and 0.25 m forward steps). Actions and positions still come from the simulator for reproducible replay. Use the actual quaternion-derived heading rather than assuming a yaw convention. pf defaults to sim.pathfinder; follower is unused."""
     if pf is None:
         pf = sim.pathfinder
     turn = math.radians(TURN_ANGLE)
@@ -659,14 +642,14 @@ def walk_pathfollow(sim, follower, agent, start, yaw, waypoints, pf=None):
     wl = list(waypoints)
     for wi, wp in enumerate(wl):
         wp = np.array(wp, np.float32)
-        # 每段起点用当前实际位置, 拿 navmesh 折线顶点作为途经小目标
+        # Use the actual segment start and navmesh vertices as intermediate targets
         sp = habitat_sim.ShortestPath(); sp.requested_start = cur_pos; sp.requested_end = wp
         verts = [np.asarray(p, np.float32) for p in sp.points] if pf.find_path(sp) else [wp]
-        verts = verts[1:] if len(verts) > 1 else [wp]     # 去掉起点顶点
+        verts = verts[1:] if len(verts) > 1 else [wp]     # Remove the starting vertex
         last_wp = (wi == len(wl) - 1)
         for vi, tg in enumerate(verts):
             last_vert = last_wp and vi == len(verts) - 1
-            rad = 0.20 if last_vert else 0.30            # 终点收紧, 保证过 0.4m 到达校验
+            rad = 0.20 if last_vert else 0.30            # Tighten the final radius to satisfy the 0.4 m arrival check
             for _ in range(2000):
                 sstate = agent.get_state()
                 pos = np.asarray(sstate.position, np.float32)
@@ -684,12 +667,12 @@ def walk_pathfollow(sim, follower, agent, start, yaw, waypoints, pf=None):
     return actions, locations
 
 
-# ----------------------------- 词表 -----------------------------
+# ----------------------------- Vocabulary -----------------------------
 _WORD = re.compile(r"[a-z]+")
 
 
 def fill_vocab(episodes):
-    """给 episodes 回填 instruction_tokens, 返回 word_list。"""
+    """Populate episode instruction_tokens and return word_list."""
     vocab = ["<pad>", "<unk>"]; vidx = {w: i for i, w in enumerate(vocab)}
     for ep in episodes:
         toks = []
@@ -705,41 +688,9 @@ AMAP = {1: "move_forward", 2: "turn_left", 3: "turn_right", 0: "stop"}
 SKIP_CATS = (set(STRUCT) | {"objects", "misc", "unlabeled", "void", "ceiling", "floor"}) \
             - {"door", "window", "column", "railing"}
 
-ZH = {
-    "bedroom": "卧室", "bathroom": "卫生间", "toilet": "厕所", "kitchen": "厨房",
-    "living room": "客厅", "dining room": "餐厅", "family room": "家庭厅",
-    "familyroom/lounge": "家庭厅/休息室", "hallway": "走廊", "stairs": "楼梯",
-    "office": "办公室", "closet": "壁橱/衣帽间", "porch/terrace/deck": "阳台/露台",
-    "spa/sauna": "spa/桑拿房", "workout/gym/exercise": "健身房", "lounge": "休息室",
-    "garage": "车库", "lobby": "门厅", "laundryroom/mudroom": "洗衣房",
-    "utilityroom/toolroom": "杂物间", "meetingroom/conferenceroom": "会议室",
-    "tv": "影音室", "bar": "吧台区", "balcony": "阳台",
-    "entryway/foyer/lobby": "玄关/门厅", "library": "图书室/书房", "classroom": "教室",
-    "dining booth": "卡座", "rec/game": "娱乐室", "outdoor": "室外", "junk": "杂物区",
-    "no label": "未标注", "other room": "其他房间", "unknown": "未知",
-    "chair": "椅子", "table": "桌子", "picture": "画框", "cabinet": "橱柜",
-    "cushion": "靠垫", "sofa": "沙发", "bed": "床", "chest_of_drawers": "抽屉柜",
-    "plant": "植物", "sink": "水槽", "stool": "凳子", "towel": "毛巾",
-    "mirror": "镜子", "tv_monitor": "电视", "shower": "淋浴", "counter": "台面",
-    "fireplace": "壁炉", "lighting": "灯具", "shelving": "置物架", "blinds": "百叶窗",
-    "seating": "座椅", "furniture": "家具", "appliances": "电器", "clothes": "衣物",
-    "curtain": "窗帘", "bathtub": "浴缸", "gym_equipment": "健身器材",
-    "stairs": "楼梯", "railing": "栏杆", "column": "柱子", "toilet": "马桶",
-    "dresser": "梳妆台", "wardrobe": "衣柜", "desk": "书桌", "refrigerator": "冰箱",
-    "fridge": "冰箱", "oven": "烤箱", "microwave": "微波炉", "fan": "风扇",
-    "lamp": "台灯", "vase": "花瓶", "rug": "地毯", "carpet": "地毯",
-    "board_panel": "板/隔断", "bench": "长凳", "shoes": "鞋",
-}
 def base_cat(name):
-    """去掉房间/物体标签的 '#序号', 取基础类别名 (用于查表/交叉校验)。"""
+    """Strip the instance suffix from a room/object label for category lookup and validation."""
     return name.split("#")[0] if name else name
-
-
-def bilingual(name):
-    base, _, num = name.partition("#")
-    z = ZH.get(base)
-    en = f"{base}#{num}" if num else base       # 英文侧保留序号: 'bedroom#2 / 卧室'
-    return f"{en} / {z}" if z else en
 
 
 MP3D_SCENE_CFG = os.path.join(SCENES_DIR, "mp3d.scene_dataset_config.json")
@@ -747,8 +698,8 @@ MP3D_SCENE_CFG = os.path.join(SCENES_DIR, "mp3d.scene_dataset_config.json")
 
 def make_sem_cfg(glb, with_rgb=False, gpu=0):
     sc = habitat_sim.SimulatorConfiguration()
-    # 关键: 走 scene_dataset_config, 否则语义 ply 的 semantic_up/front 变换不生效,
-    # 语义传感器会与 RGB 错位(habitat v0.3.x + MP3D 已知 bug)。
+    # Use scene_dataset_config so semantic_up/front transforms apply to the semantic PLY;
+    # otherwise semantics and RGB may be misaligned (Habitat v0.3.x / MP3D).
     if os.path.exists(MP3D_SCENE_CFG):
         sc.scene_dataset_config_file = MP3D_SCENE_CFG
         sc.scene_id = os.path.basename(glb).replace(".glb", "")
@@ -770,8 +721,8 @@ def make_sem_cfg(glb, with_rgb=False, gpu=0):
     sem.sensor_type = habitat_sim.SensorType.SEMANTIC
     sem.resolution = [480, 640]
     sem.position = [0.0, 1.25, 0.0]
-    # depth 传感器渲染的是 .glb 渲染网格(与 RGB 同一套墙), 用于对语义 .ply
-    # 的"穿墙"实例做遮挡门控: MP3D 语义 ply 墙薄/有洞, sem 会看到隔壁物体。
+    # Depth uses the GLB render mesh, sharing RGB walls, to gate semantic PLY instances
+    # visible through thin or missing semantic walls.
     dep = habitat_sim.CameraSensorSpec()
     dep.uuid = "depth"
     dep.sensor_type = habitat_sim.SensorType.DEPTH
@@ -796,7 +747,7 @@ def _cs(a):
 
 
 def build_maps(sim):
-    """semantic_id -> (类别, 中心xyz, AABB半长, 所属region类别); 以及 floor 物体 (几何兜底判房间)。"""
+    """Map semantic IDs to categories, centers, AABB half-sizes, and region categories; include floor geometry for room fallback."""
     ss = sim.semantic_scene
     id2cat, id2ctr, id2reg, id2half = {}, {}, {}, {}
     for o in ss.objects:
@@ -807,7 +758,7 @@ def build_maps(sim):
         id2ctr[o.semantic_id] = c
         id2half[o.semantic_id] = h
     floors = []
-    per_reg = {}   # 每个 region 一个实例号(同类多个房间可区分, 重复进入=同号)
+    per_reg = {}   # One instance ID per region distinguishes same-category rooms and remains stable on revisits
     for r in ss.regions:
         if not r.category:
             continue
@@ -825,8 +776,7 @@ def build_maps(sim):
 
 
 def aabb_dist(cam, ctr, half):
-    """相机到物体 AABB 表面的 3D 距离(在 box 内则为 0); ctr/half 缺失返回大值。
-    比中心距更准: 大件物体(长吧台/大沙发/楼梯)贴身时中心距虚高, 会被 maxdist 误杀。"""
+    """Return camera-to-AABB surface distance (zero inside); missing geometry yields a large value. Surface distance avoids rejecting nearby large objects whose centers are far away."""
     if ctr is None or half is None:
         return 1e9
     d = np.maximum(np.abs(np.asarray(cam, np.float32) - ctr) - half, 0.0)
@@ -834,9 +784,7 @@ def aabb_dist(cam, ctr, half):
 
 
 def occluded_ids(sem, depth, cam, id2ctr, id2half, margin=0.6):
-    """穿墙实例门控: 语义 ply 墙薄/有洞, sem 会看到隔壁房间的物体。若某实例像素处的
-    depth(渲染 glb 网格, 与 RGB 同一套墙)明显近于到该实例 AABB 的距离, 说明中间隔着
-    一堵 glb 的墙 -> 判为被遮挡。返回被遮挡的 semantic_id 集合。"""
+    """Return occluded semantic IDs: if GLB depth at an instance is substantially nearer than its AABB, a rendered wall blocks that semantic PLY object."""
     if depth is None:
         return set()
     d = np.asarray(depth)
@@ -845,7 +793,7 @@ def occluded_ids(sem, depth, cam, id2ctr, id2half, margin=0.6):
         sid = int(sid)
         if sid not in id2half:
             continue
-        m = (sem == sid) & (d > 1e-3)          # 排除无效/背景深度
+        m = (sem == sid) & (d > 1e-3)          # Exclude invalid and background depth
         if int(m.sum()) < 16:
             continue
         if float(np.median(d[m])) + margin < aabb_dist(cam, id2ctr.get(sid), id2half.get(sid)):
@@ -854,8 +802,7 @@ def occluded_ids(sem, depth, cam, id2ctr, id2half, margin=0.6):
 
 
 def room_from_sem(sem_img, id2cat, id2reg):
-    """看画面最底部窄条(脚下最近地板)的 floor 像素属于哪个 region -> 当前房间。
-    只取底部窄条而非整个下半屏, 避免看到前方别的房间地板导致房间抖动。"""
+    """Infer the current room from floor pixels in a narrow bottom strip, avoiding distant floors that cause label flicker."""
     patch = sem_img[430:, 224:416].reshape(-1)
     vals, cnts = np.unique(patch, return_counts=True)
     votes = Counter()
@@ -866,7 +813,7 @@ def room_from_sem(sem_img, id2cat, id2reg):
 
 
 def room_at(p, floors):
-    """几何兜底: agent 脚下属于哪块 floor patch -> region 类别 (语义投票失败时用)。"""
+    """Geometry fallback: infer the region from the floor patch beneath the agent when semantic voting fails."""
     p = np.asarray(p, np.float32)
     best, bd = "unknown", 1e9
     for rc, c, h in floors:
@@ -877,27 +824,27 @@ def room_at(p, floors):
     return best
 
 
-NEAR_DIST = 3.5  # 这么近的物体即使 region 不匹配也算地标(如脚下的楼梯)
-MIN_ROOM_RUN = 6  # 房间连续驻留不足此步数视为"路过", 不记录为 Location
+NEAR_DIST = 3.5  # Nearby objects remain landmarks even when their region differs, such as stairs underfoot
+MIN_ROOM_RUN = 6  # Shorter room runs count as passing by and are omitted from Location
 
-# 显著地标类别: 导航辨识度高, 即使占屏小也保留(放宽入选阈值), 排序时加权上浮。
+# Distinctive landmarks use relaxed pixel thresholds and higher ranking weights.
 STRONG_LM = {"picture", "tv_monitor", "fireplace", "mirror", "stairs", "toilet",
              "bed", "sofa", "refrigerator", "fridge", "sink", "plant", "bathtub",
              "oven", "microwave", "vase", "piano"}
-# 大而泛用、辨识度低: 易靠体量霸榜、把小而醒目的地标挤掉, 排序时降权。
+# Downweight large generic objects so they do not displace smaller distinctive landmarks.
 BULKY_GENERIC = {"cabinet", "shelving", "counter", "furniture", "curtain", "blinds",
                  "board_panel", "seating", "railing", "column", "wardrobe",
                  "chest_of_drawers", "dresser", "rug", "carpet"}
 LM_WEIGHT = {**{c: 2.0 for c in STRONG_LM}, **{c: 0.5 for c in BULKY_GENERIC}}
 
-# 房间特征物 (mpcat40): 用于交叉校验 floor 房间标签
+# Room-signature objects (mpcat40) for validating floor labels
 ROOM_SIG = {
     "bathroom": {"toilet", "shower", "bathtub", "towel"},
     "bedroom": {"bed"},
     "kitchen": {"oven", "refrigerator", "fridge", "microwave", "stove", "appliances"},
     "living room": {"sofa", "cushion", "tv_monitor", "fireplace"},
 }
-# floor 房间名 -> ROOM_SIG 键 (判该 floor 标签自身有无特征物支持)
+# Map floor room names to ROOM_SIG keys to check supporting object evidence
 _ROOM_CANON = {
     "toilet": "bathroom", "bathroom": "bathroom", "spa/sauna": "bathroom",
     "bedroom": "bedroom", "kitchen": "kitchen",
@@ -908,7 +855,7 @@ _ROOM_CANON = {
 
 
 def peak_objects(hists, cams, id2cat, id2ctr, id2half, maxdist):
-    """节点跨段内, 每个非结构物体类别的单帧最大占屏比(视线内 ∩ ≤maxdist), 不做 region 过滤。"""
+    """Return peak per-frame pixel fractions for visible nonstructural categories within maxdist, without region filtering."""
     tot = 480 * 640
     peak = {}
     for h, cam in zip(hists, cams):
@@ -927,26 +874,19 @@ def peak_objects(hists, cams, id2cat, id2ctr, id2half, maxdist):
 
 
 def reconcile_room(floor_room, peak, strong=0.04, floor_min=0.015):
-    """强物体证据优先: 若 floor 标签自身无特征物支持(<floor_min), 而某房间特征物占屏强(≥strong),
-    则按物体覆盖 floor 标签; 否则保留 floor。返回 (房间, 是否被物体覆盖)。"""
+    """Override an unsupported floor label (<floor_min) with strong object evidence (>=strong); otherwise retain it. Return (room, was_overridden)."""
     scores = {r: sum(peak.get(o, 0.0) for o in objs) for r, objs in ROOM_SIG.items()}
     best = max(scores, key=lambda r: scores[r])
     best_s = scores[best]
-    floor_key = _ROOM_CANON.get(base_cat(floor_room))   # 房间标签带 #序号, 取基础类别校验
+    floor_key = _ROOM_CANON.get(base_cat(floor_room))   # Validate the base category without its instance suffix
     floor_s = scores.get(floor_key, 0.0) if floor_key else 0.0
     if best_s >= strong and floor_s < floor_min and best != floor_key:
-        return best, True                               # 物体证据覆盖: 回落到类别(无区域号)
+        return best, True                               # Object evidence overrides the label with a category lacking a region ID
     return floor_room, False
 
 
 def landmarks_from(hists, cams, id2cat, id2ctr, id2half, id2reg, allowed, topn, maxdist, min_frac):
-    """该段每一帧里, 物体类别的单帧最大占屏比 (峰值)。保留条件:
-    视线内 ∩ 峰值≥阈值 ∩ ( 物体所属 region∈本节点房间 且 ≤maxdist
-                          或 距相机(AABB表面)≤NEAR_DIST(很近, 不管 region) )。
-    -> 剔除"隔开放空间/门口瞥到的别房间远物"(如客厅里的健身器材),
-       但保住脚下很近的相关物(如正在下的楼梯)。
-    排序按【显著性 = 峰值占屏 × 类别权重】: 显著地标(picture/楼梯/镜子等)放宽入选阈值
-    (min_frac×0.4)并上浮, 大而泛用物(橱柜/置物架)降权, 避免它们靠体量霸榜挤掉小地标。"""
+    """Rank visible landmarks by peak pixel fraction times category weight. Keep objects above threshold when their region matches and distance <= maxdist, or when AABB distance <= NEAR_DIST regardless of region. This removes distant objects in other rooms while preserving nearby stairs. Distinctive categories use min_frac * 0.4; large generic categories are downweighted."""
     tot = 480 * 640
     peak = {}
     for h, cam in zip(hists, cams):
@@ -958,10 +898,10 @@ def landmarks_from(hists, cams, id2cat, id2ctr, id2half, id2reg, allowed, topn, 
             ctr = id2ctr.get(sid)
             if ctr is None:
                 continue
-            d = aabb_dist(cam, ctr, id2half.get(sid))      # 到 AABB 表面, 不用中心距
+            d = aabb_dist(cam, ctr, id2half.get(sid))      # Use AABB surface distance, not center distance
             if d > maxdist:
                 continue
-            if allowed is not None:                        # 精度模式: region 约束
+            if allowed is not None:                        # Precision mode: constrain regions
                 in_region = id2reg.get(sid) in allowed
                 if not in_region and d > NEAR_DIST:
                     continue
@@ -979,7 +919,7 @@ def landmarks_from(hists, cams, id2cat, id2ctr, id2half, id2reg, allowed, topn, 
 
 def turn_label(net_deg, turn_deg=45):
     a = abs(net_deg)
-    if a < turn_deg:      # 净转角 <turn_deg° 视为直行, 不算转弯 (默认45, 可调30)
+    if a < turn_deg:      # Treat net angles below turn_deg as straight (default 45; can use 30)
         return None
     if a >= 150:
         return "Turn around"
@@ -988,8 +928,7 @@ def turn_label(net_deg, turn_deg=45):
 
 
 def merge_sig(actions, dy, is_last, turn_deg=45):
-    """合并签名: 同 (转向方向, 上下楼, 是否停止) 的连续航点并为一个节点 (跨房间也合并)。
-    转向只看方向(左/右/掉头/直行), 不区分 slightly; 房间作为节点内的路径单独记录。"""
+    """Merge consecutive waypoints sharing turn direction, stair direction, and stopping state, even across rooms. Ignore slight-turn qualifiers; retain the room sequence separately."""
     net = sum(15 if a == 2 else (-15 if a == 3 else 0) for a in actions)
     if abs(net) >= 150:
         d = "around"
@@ -1004,7 +943,7 @@ def merge_sig(actions, dy, is_last, turn_deg=45):
 
 
 def fwd_phrase(nfwd):
-    """按前进距离(步数×0.25m)给 walk forward 加程度词: 长/短/中(不加)。"""
+    """Qualify forward movement as long, short, or unqualified using distance (steps * 0.25 m)."""
     m = nfwd * FORWARD_STEP
     if m >= 8.0:
         return "walk forward a long way"
@@ -1013,13 +952,12 @@ def fwd_phrase(nfwd):
     return "walk forward"
 
 
-FWD_MIN_DISP = 0.5  # 前进段净水平位移≤此值视为"原地"(撞墙/被挡/仅调整), 不算 walk forward
+FWD_MIN_DISP = 0.5  # Horizontal displacement at or below this threshold is stationary, not forward motion
 
 
 def seg_action(actions, dy, is_first, is_last, disp=None, turn_deg=45, max_parts=3):
-    """按【时序】把动作流切成 转向段/前进段, 保序生成短语(每个转向段独立判净角);
-    不再把整段转向塌缩成单一净角 -> 能区分 '先走到门口再左转' 这类。最多 max_parts 段。"""
-    # 时序切段: 连续 forward 归一段(记步数), 连续 turn 归一段(记净角)
+    """Split actions chronologically into turn and forward segments, computing each turn independently. Preserve distinctions such as walking to a door before turning left. Keep at most max_parts segments."""
+    # Group consecutive forward actions by step count and turns by net angle
     seq, i = [], 0
     while i < len(actions):
         a = actions[i]
@@ -1038,7 +976,7 @@ def seg_action(actions, dy, is_first, is_last, disp=None, turn_deg=45, max_parts
     stair = "walk downstairs" if dy < -0.7 else ("walk upstairs" if dy > 0.7 else "walk forward")
 
     def fold(runs):
-        """相邻同类段合并(转向累加净角, 前进累加步数), 保证严格交替。"""
+        """Fold adjacent segments of the same type by summing angles or steps, preserving alternation."""
         out = []
         for k, v in runs:
             if out and out[-1][0] == k:
@@ -1047,19 +985,19 @@ def seg_action(actions, dy, is_first, is_last, disp=None, turn_deg=45, max_parts
                 out.append([k, v])
         return out
 
-    # 1. 先丢子阈值微转 + 折叠: 把被微转打散的前进拼回来(否则碎步会被逐段当原地丢光, 误判 Adjust heading)
+    # First remove tiny turns and fold forward fragments to avoid incorrectly classifying all fragments as stationary
     clean = fold([[k, v] for k, v in seq
                   if not (k == "turn" and turn_label(v, turn_deg) is None)])
-    # 2. 再丢合并后仍≤0.5m 的原地前进 + 折叠(此时相邻两转才会并, 因为中间只是原地小挪)
+    # Then remove folded forward segments <=0.5 m and fold again; adjacent turns now reflect only stationary adjustments
     clean = fold([[k, v] for k, v in clean
                   if not (k == "fwd" and v * FORWARD_STEP <= FWD_MIN_DISP)])
 
     def sig(run):
-        # 段的显著度: 转向按|净角|, 前进按 米数×90(1m≈90°), 便于统一比较取舍
+        # Compare segment significance using absolute turn angle or forward meters * 90
         return abs(run[1]) if run[0] == "turn" else run[1] * FORWARD_STEP * 90.0
 
-    # 超过 max_parts: 优先丢"走"、保留转向(转向=决策点, 更该留); 但不丢夹在两转向之间的走
-    # (丢了会让两转向相邻被并成假大转/连续turn); 实在没可丢的走时才丢最不显著的转向。
+    # Above max_parts, remove forward segments before turns, but preserve forward motion between turns
+    # Otherwise unrelated turns could merge; if no forward segment can be removed, drop the least significant turn.
     while len(clean) > max_parts:
         droppable = [j for j, (k, _) in enumerate(clean)
                      if k == "fwd" and not (0 < j < len(clean) - 1
@@ -1069,7 +1007,7 @@ def seg_action(actions, dy, is_first, is_last, disp=None, turn_deg=45, max_parts
         else:
             i = min(range(len(clean)), key=lambda j: sig(clean[j]))
         del clean[i]
-        clean = fold(clean)      # 丢"走"后两侧若同类会合并(只并走, 不会并转向)
+        clean = fold(clean)      # Fold adjacent forward segments after removal; do not merge unrelated turns
     parts = []
     for k, v in clean:
         if k == "turn":
@@ -1112,20 +1050,20 @@ def process_episode(sim, ep, gt, maps, topn, maxdist, min_frac, region_filter,
     st.rotation = np.quaternion(sr[3], sr[0], sr[1], sr[2])
     ag.set_state(st)
 
-    # 需要存帧的候选步(航点最近步), 只在这些步抓 RGB, 省内存
+    # Capture RGB only at candidate steps nearest waypoints to save memory
     cand = set()
     if capture_rgb:
         nloc = len(locs)
         for wp in ep["reference_path"]:
             s = min(nearest_step(locs, wp), nloc - 1)
-            cand.add(s); cand.add(max(0, s - cap_off))   # 本帧和偏移帧都抓, 供条件挑选
+            cand.add(s); cand.add(max(0, s - cap_off))   # Capture both the current and offset frames for conditional selection
 
     hist, votes, rgb_at = [], [], {}
 
     def grab(k):
         obs = sim.get_sensor_observations()
         sem = np.asarray(obs["sem"])
-        # 穿墙门控: 用 depth(glb 墙)把被墙挡住的语义 ply 实例抹回背景, 不计入地标/房间
+        # Use GLB depth to mask semantic PLY instances behind walls before landmark and room inference
         cam = locs[k] if k < len(locs) else np.asarray(ag.get_state().position, np.float32)
         occ = occluded_ids(sem, obs.get("depth"), cam, id2ctr, id2half)
         if occ:
@@ -1147,16 +1085,16 @@ def process_episode(sim, ep, gt, maps, topn, maxdist, min_frac, region_filter,
         grab(k)
     n_steps = k
 
-    # 每步房间: 语义 floor 投票优先, 失败用几何兜底
+    # Infer per-step rooms using floor voting, with geometry as fallback
     raw_room = [votes[s] if votes[s] else room_at(locs[s], floors)
                 for s in range(len(hist))]
-    # 时间平滑: 窗口众数, 去掉逐帧抖动 (走开放空间时会瞥到前方别的房间地板)
+    # Smooth room labels with a windowed mode to remove flicker from distant visible floors
     W = 5
     step_room = []
     for s in range(len(raw_room)):
         win = [r for r in raw_room[max(0, s - W):s + W + 1] if r and r != "unknown"]
         step_room.append(Counter(win).most_common(1)[0][0] if win else "unknown")
-    # 房间"存活"过滤: 连续同房间不足 MIN_ROOM_RUN 步的瞬时段记为 unknown(只是路过, 不作为 Location)
+    # Mark room runs shorter than MIN_ROOM_RUN as unknown; do not report brief pass-by labels as Location
     i = 0
     while i < len(step_room):
         j = i
@@ -1172,7 +1110,7 @@ def process_episode(sim, ep, gt, maps, topn, maxdist, min_frac, region_filter,
         return cnt.most_common(1)[0][0] if cnt else "unknown"
 
     def room_path(lo, hi, min_run=4):
-        """节点跨越的房间序列: 合并连续同房间, 并丢掉驻留<min_run步的瞬时抖动。"""
+        """Return the traversed room sequence, merging consecutive duplicates and removing runs shorter than min_run."""
         runs = []
         for s in range(lo, hi + 1):
             r = step_room[s]
@@ -1181,7 +1119,7 @@ def process_episode(sim, ep, gt, maps, topn, maxdist, min_frac, region_filter,
             else:
                 runs.append([r, 1])
         seq = [r for r, n in runs if r and r != "unknown" and n >= min_run]
-        # 去掉相邻重复(过滤后可能再次相邻)
+        # Remove adjacent duplicates that may become neighbors after filtering
         out = []
         for r in seq:
             if not out or out[-1] != r:
@@ -1196,14 +1134,14 @@ def process_episode(sim, ep, gt, maps, topn, maxdist, min_frac, region_filter,
     for i in range(1, len(wp_steps)):
         wp_steps[i] = max(wp_steps[i], wp_steps[i - 1])
 
-    # 每个原始航点的属性
+    # Properties of each original waypoint
     raw = []
     for i, s in enumerate(wp_steps):
         is_first, is_last = i == 0, i == len(ref) - 1
         a0 = wp_steps[i - 1] if not is_first else 0
         seg_acts = list(actions[a0:s])
         dy = float(ref[i][1] - ref[i - 1][1]) if not is_first else 0.0
-        # 相邻 reference_path 航点的水平间距; ≤FWD_MIN_DISP 视为"原地", 不计入前进
+        # Horizontal spacing between reference waypoints; <=FWD_MIN_DISP is stationary
         wp_disp = 0.0 if is_first else float(np.hypot(ref[i][0] - ref[i - 1][0],
                                                        ref[i][2] - ref[i - 1][2]))
         pos = locs[s] if s < len(locs) else np.array(ref[i], np.float32)
@@ -1214,13 +1152,13 @@ def process_episode(sim, ep, gt, maps, topn, maxdist, min_frac, region_filter,
             "wp_disp": wp_disp, "sig": merge_sig(seg_acts, dy, is_last, turn_deg),
         })
 
-    # 聚类合并: 连续 merge_sig 相同的航点并为一个节点 (累计动作子序列与 dy)
+    # Merge consecutive waypoints with the same merge_sig, accumulating actions and vertical displacement
     nodes = []
     for r in raw:
-        # Start(第一个航点)强制单独成节点, 不与后续合并
+        # Keep Start as a separate node
         can_merge = (nodes and nodes[-1]["sig"] == r["sig"]
                      and not r["is_first"] and not nodes[-1]["is_first"])
-        eff_fwd = r["wp_disp"] if r["wp_disp"] > FWD_MIN_DISP else 0.0   # 原地航点不计入前进
+        eff_fwd = r["wp_disp"] if r["wp_disp"] > FWD_MIN_DISP else 0.0   # Exclude stationary waypoints from forward distance
         if can_merge:
             nd = nodes[-1]
             nd["members"].append(r["i"]); nd["steps"].append(r["step"])
@@ -1241,7 +1179,7 @@ def process_episode(sim, ep, gt, maps, topn, maxdist, min_frac, region_filter,
         lo, hi = min(s_lo, s_hi), s_hi
         hists = hist[lo:hi + 1] or [hist[s_hi]]
         cams = list(locs[lo:hi + 1]) or [locs[s_hi]]
-        # 节点有效前进 = 成员航点里 >0.5m 的间距之和(原地航点已剔除), 判定是否算 walk forward
+        # Effective forward distance sums member waypoint gaps >0.5 m to determine whether the node walks forward
         action = seg_action(nd["acts"], nd["dy"], nd["is_first"], nd["is_last"], nd["fwd_disp"], turn_deg)
         froom = span_room(lo, hi)
         if obj_room_check:
@@ -1253,11 +1191,11 @@ def process_episode(sim, ep, gt, maps, topn, maxdist, min_frac, region_filter,
             "step": nd["steps"][-1],
             "step_range": [int(s_lo), int(s_hi)],
             "Action": action,
-            "Location": bilingual(froom),
+            "Location": froom,
             "position": [round(float(x), 3) for x in nd["end_pos"]],
         })
 
-    # 节点平均间距 (相邻节点代表位置的欧氏距离)
+    # Mean Euclidean spacing between representative node positions
     centers = [np.array(n["position"], np.float32) for n in out_nodes]
     gaps = [float(np.linalg.norm(centers[i] - centers[i - 1])) for i in range(1, len(centers))]
     avg_gap = round(float(np.mean(gaps)), 3) if gaps else 0.0
@@ -1267,7 +1205,7 @@ def process_episode(sim, ep, gt, maps, topn, maxdist, min_frac, region_filter,
         for n in out_nodes:
             s = min(n["step"], len(locs) - 1)
             if mid_off_thresh is not None:
-                # 仅当距上一节点步数 > 阈值(长段)才用偏移帧, 否则用本帧
+                # Use an offset frame only when the step gap exceeds the long-segment threshold
                 use = max(0, s - cap_off) if (prev is not None and (n["step"] - prev) > mid_off_thresh) else s
             else:
                 use = max(0, s - cap_off)

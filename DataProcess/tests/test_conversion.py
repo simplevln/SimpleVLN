@@ -64,7 +64,7 @@ class ConversionTests(unittest.TestCase):
             self.assertIsNone(common.prep_actions_and_images(self.episode(), self.root))
         output = []
         with self.assertWarns(UserWarning):
-            vln.convert_episode_idm(self.episode(), self.root, output)
+            vln.convert_episode_vln(self.episode(), self.root, output)
         self.assertEqual(output, [])
 
     def test_action_sequences_reject_strings_objects_and_scalars(self):
@@ -90,9 +90,6 @@ class ConversionTests(unittest.TestCase):
         self.assertEqual(actions[-1], 'stop')
         self.assertEqual(images[-2], images[-1])
         self.assertEqual(len(images), 5)
-        idm_actions, idm_images = common.prep_actions_and_images(self.episode(), self.root, True)
-        self.assertEqual(len(idm_images), len(idm_actions) + 1)
-        self.assertNotEqual(idm_images[-1], idm_images[-2])
         self.assertIsNone(common.try_combine('stop', 'stop'))
         with self.assertWarns(UserWarning):
             self.assertIsNone(common.prep_actions_and_images(self.episode(actions=[-1, 1, 0, 2]), self.root))
@@ -103,73 +100,49 @@ class ConversionTests(unittest.TestCase):
         self.assertEqual(common.uniform_sample_with_ends(list(range(4)), 1), [3])
         with self.assertRaises(ValueError): common.uniform_sample_with_ends([1], 0)
 
-    def test_merged_labels_use_execution_and_stop_uses_final_frame(self):
-        self.frames('images/scene_1', 7, rgb=True)
-        ep = self.episode(video='images/scene_1', actions=[-1, 1, 1, 1, 2, 2, 3],
-                          model_call_groups=[dict(call_step_id=0, actions=[1, 1, 1], model_output='forward 300 cm')])
+    def test_atomic_labels_use_execution_and_final_stop_frame(self):
+        self.frames('scene_1', 4)
+        ep = self.episode(actions=[-1, 1, 1, 1], executed_actions=[2, 1, 3, 0])
         output = []
-        dagger.convert_episode_merged(ep, self.root, output)
-        self.assertEqual(output[0]['messages'][1]['value'], 'forward 75 cm')
-        self.assertEqual(output[-1]['messages'][1]['value'], 'stop')
-        self.assertTrue(output[-1]['images'][-1].endswith('006.jpg'))
-        # An expert changed the first action; the new explicit group reflects it.
-        ep.update(executed_actions=[2, 0], actions=[-1, 2], terminal_action=0,
-                  model_call_groups=[dict(call_step_id=0, planned_actions=[1,1,1],
-                                         actions=[2], executed_actions=[2], model_output='forward 300 cm')])
-        output = []; dagger.convert_episode_merged(ep, self.root, output)
-        self.assertEqual(output[0]['messages'][1]['value'], 'turn left 15 degree')
-        self.assertTrue(output[-1]['images'][-1].endswith('001.jpg'))
-        ep['model_call_groups'][0]['executed_actions'] = [1]
-        with self.assertWarns(UserWarning):
-            output = []; dagger.convert_episode_merged(ep, self.root, output)
-        self.assertEqual(output, [])
+        dagger.convert_episode_atomic(ep, self.root, output)
+        self.assertTrue(output)
+        self.assertIn('turn left 15 degree', output[0]['messages'][1]['value'])
+        self.assertIn('stop', output[-1]['messages'][1]['value'])
+        self.assertTrue(output[-1]['images'][-1].endswith('003.jpg'))
 
-    def test_merged_conversion_rejects_noninteger_call_indices(self):
-        self.frames('scene_1', 4)
-        for index in (0.5, True, float('inf'), float('nan')):
-            with self.subTest(index=index), self.assertWarns(UserWarning):
-                output = []
-                dagger.convert_episode_merged(self.episode(model_call_groups=[
-                    dict(call_step_id=index, actions=[1, 2, 3])]), self.root, output)
-                self.assertEqual(output, [])
-
-    def test_merged_conversion_rejects_malformed_group_actions_without_partial_output(self):
-        self.frames('scene_1', 4)
-        for field in ('actions', 'executed_actions'):
-            for value in ('23', {'2': 2, '3': 3}, 23, True):
-                with self.subTest(field=field, value=value), self.assertWarnsRegex(UserWarning, 'must be a list'):
-                    output = []
-                    dagger.convert_episode_merged(self.episode(executed_actions=[1, 2, 3, 0],
-                        model_call_groups=[dict(call_step_id=0, executed_actions=[1]),
-                                           dict(call_step_id=1, **{field: value})]), self.root, output)
-                    self.assertEqual(output, [])
-
-    def test_cli_creates_parent_directories_and_both_distinct_outputs(self):
+    def test_cli_creates_one_atomic_output_without_model_groups(self):
         self.frames('scene_1', 4)
         annotations = self.root / 'input.json'
-        ep = self.episode(model_call_groups=[dict(call_step_id=0, actions=[1,2,3])])
-        annotations.write_text('\ufeff\n ' + json.dumps([ep]))
-        output = self.root / 'new' / 'output'
+        annotations.write_text('\ufeff\n ' + json.dumps([self.episode()]))
+        output = self.root / 'new' / 'output.json'
         result = subprocess.run([sys.executable, str(ROOT / 'tool/convert_dagger.py'),
                                  '--annotation_path', str(annotations), '--image_root', str(self.root),
                                  '--output_path', str(output)], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue(output.with_name('output_atomic.json').exists())
-        self.assertTrue(output.with_name('output_merged.json').exists())
+        self.assertTrue(json.loads(output.read_text()))
+        self.assertEqual(list(output.parent.iterdir()), [output])
 
     def test_standard_samples_match_original_converter(self):
         fixture = json.loads((ROOT / 'tests/fixtures/conversion_reference.json').read_text())
         episodes = fixture['episodes']
         for episode in episodes:
             self.frames(episode['video_id'], fixture['frame_count'])
-        for task in ('vln', 'idm', 'ffs'):
-            random.seed(fixture['seed']); result = []
-            pool = vln.build_scene_frame_pool(episodes, self.root) if task == 'ffs' else None
-            for ep in episodes:
-                if task == 'ffs': vln.convert_episode_ffs(ep, self.root, pool, result)
-                else: getattr(vln, 'convert_episode_' + task)(ep, self.root, result)
-            common.relativize_image_paths(result, self.root)
-            self.assertEqual(fixture['expected'][task], result, task)
+        random.seed(fixture['seed']); result = []
+        for ep in episodes:
+            vln.convert_episode_vln(ep, self.root, result)
+        common.relativize_image_paths(result, self.root)
+        self.assertEqual(fixture['expected']['vln'], result)
+        for sample in result:
+            self.assertLessEqual(len(sample['images']), 9)
+            self.assertGreaterEqual(len(sample['images']), 2)
+            self.assertNotIn('image_roles', sample)
+            self.assertNotIn('local observation', sample['messages'][0]['value'])
+            self.assertEqual(sample['messages'][0]['value'].count('<image>'), len(sample['images']))
+
+    def test_history_plus_current_indices(self):
+        self.assertEqual(vln.sample_history_plus_current(list(range(12))),
+                         [0, 1, 3, 4, 6, 7, 9, 10, 11])
+        self.assertEqual(vln.sample_history_plus_current([0]), [0])
 
     def test_instruction_objects_are_read_as_text_and_bad_types_are_skipped(self):
         self.frames('scene_1', 4)
@@ -180,20 +153,19 @@ class ConversionTests(unittest.TestCase):
         with self.assertWarns(UserWarning):
             self.assertEqual(common.get_instructions(self.episode(instruction=42)), [])
 
-    def test_both_mode_does_not_write_a_partial_conversion(self):
-        self.frames('scene_1', 4)
-        annotations = self.root / 'input.json'
-        annotations.write_text(json.dumps([self.episode()]))  # No model call groups.
-        atomic = self.root / 'output_atomic.json'
-        atomic.write_text('previous output')
-        result = subprocess.run([sys.executable, str(ROOT / 'tool/convert_dagger.py'),
-                                 '--annotation_path', str(annotations), '--image_root', str(self.root),
-                                 '--output_path', str(self.root / 'output.json'), '--mode', 'both'],
-                                capture_output=True, text=True)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn('model_call_groups', result.stderr)
-        self.assertEqual(atomic.read_text(), 'previous output')
-        self.assertFalse((self.root / 'output_merged.json').exists())
+    def test_removed_modes_and_task_selection_are_rejected(self):
+        output = self.root / 'output.json'
+        output.write_text('previous output')
+        cases = [('convert_dagger.py', '--mode', mode) for mode in ('merged', 'both')]
+        cases += [('convert_vln.py', '--task_type', task) for task in ('idm', 'ffs')]
+        for converter, flag, value in cases:
+            with self.subTest(converter=converter, value=value):
+                result = subprocess.run([sys.executable, str(ROOT / 'tool' / converter),
+                    '--annotation_path', str(self.root / 'input.json'), '--image_root', str(self.root),
+                    '--output_path', str(output), flag, value], capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(value, result.stderr)
+                self.assertEqual(output.read_text(), 'previous output')
 
     def test_cli_can_export_portable_image_paths(self):
         self.frames('scene_1', 4)

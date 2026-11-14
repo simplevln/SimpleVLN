@@ -24,7 +24,7 @@ python tool/convert_vln.py \
     --image_root data/trajectories \
     --output_path data/annotations/vln.json \
     --relative_to data \
-    --task_type vln --seed 0
+    --seed 0
 ```
 
 Input annotations may be JSON arrays or JSONL. A trajectory contains an episode
@@ -54,7 +54,6 @@ frame. Missing or duplicate numbered frames and movement after STOP are rejected
 The default uses eight uniformly sampled history frames plus the current frame;
 at the first decision, the initial frame fills both history and current slots.
 `--max_history` changes the history count. `--seed` controls random action merging.
-`--task_type` also accepts `idm`, `ffs`, or multiple task names.
 
 ### Portable Image Paths
 
@@ -132,13 +131,14 @@ python tool/convert_dagger.py \
     --annotation_path data/dagger/R2R/annotations_actions.json \
     --image_root data/dagger/R2R \
     --output_path data/annotations/dagger.json \
-    --relative_to data --mode both --seed 0
+    --relative_to data --mode atomic --seed 0
 ```
 
-`atomic` uses the same random merging as the standard VLN converter. `merged`
-uses recorded model-call spans. Both use executed actions, including expert
-interventions, as labels. `both` writes `dagger_atomic.json` and
-`dagger_merged.json`; merged conversion requires `model_call_groups`.
+DAgger conversion supports only `atomic` mode (the default). It uses the same
+random action merging as the standard VLN converter and labels executed actions,
+including expert interventions. It writes one JSON file at `--output_path` and
+does not require model-call groups. The standard converter produces only VLN
+navigation samples and has no task-selection option.
 
 ### Camera Poses
 

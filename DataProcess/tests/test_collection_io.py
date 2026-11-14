@@ -14,7 +14,7 @@ from collection_io import append_records, completed_keys, load_records, merge_an
 
 def writer(path, worker):
     for step in range(10):
-        append_records(path, [dict(worker=worker, step=step, text='向前走' * 2000)])
+        append_records(path, [dict(worker=worker, step=step, text='Move forward \u2192' * 2000)])
 
 
 class CollectionIOTests(unittest.TestCase):

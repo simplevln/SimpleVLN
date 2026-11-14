@@ -30,15 +30,15 @@ from quotas import ratio_caps
 import nav as C
 
 # =========================================================================
-# rl: room-to-room RL 数据 (导航图 + 多跳 + 物体 goal + 地标指令 + 去重)
+# Room-to-room RL data: navigation graphs, multiple hops, object goals, landmark instructions, and deduplication
 # =========================================================================
 GOAL_RADIUS_RL = 0.5
 STEP_MIN, STEP_MAX = 10, 400
-# reference_path 重采样: 对齐原始 R2R/RxR 的 ~1.8m 相邻点间距与点数 (别用 RDP 抽稀成 2 点)
-REF_STEP = 1.8          # 相邻 waypoint 目标弧长间距 (m)
-REF_MIN_PTS = 5         # 每条轨迹最少 waypoint 数 (短轨迹兜底)
-RL_MIN_GEO = 3.0        # geodesic 下限(m); 提高可滤掉超短轨迹, 右移步数分布补中等桶
-RL_STALE_MAX = 800      # 连续无新增即放弃; rxr 多房 walk 慢, 调低(如150)加速饱和场景放弃
+# Resample reference_path at the original R2R/RxR spacing (~1.8 m); avoid reducing paths to two RDP points
+REF_STEP = 1.8          # Target arc-length spacing between waypoints (m)
+REF_MIN_PTS = 5         # Minimum waypoints per trajectory, including short paths
+RL_MIN_GEO = 3.0        # Minimum geodesic distance (m); increase to reject short paths and favor medium step bins
+RL_STALE_MAX = 800      # Stop after consecutive unsuccessful attempts; lower (e.g. 150) for slow, saturated RxR scenes
 LEVELS = [(i, i + 50) for i in range(0, 400, 50)]   # 0-50,50-100,...,350-400
 
 
@@ -49,13 +49,12 @@ def level_name(steps):
     return None
 
 
-# 每类经验步/米 (waypoint 轨迹: rxr 转弯多 -> steps/m 更高), 用于"目标桶 -> 目标 geodesic 带"的定向提案
+# Empirical steps per meter by category; map target step bins to geodesic bands, accounting for more RxR turns
 SPM = {"r2r": 5.8, "rxr": 9.5}
 
 
 def parse_target_dist(s):
-    """解析 --target-dist: 'lo:count' 逗号分隔, lo=桶下界(0,50,100,...).
-    返回 {lvl_name: count}; 空串返回 None(退化为原始无配额行为)。"""
+    """Parse comma-separated lo:count quotas, where lo is the bin lower bound (0, 50, 100, ...). Return {lvl_name: count}, or None for an empty string."""
     if not s:
         return None
     out = {}
@@ -72,13 +71,12 @@ def parse_target_dist(s):
 
 
 def load_existing_trajs(dataset_dir, want_scenes=None):
-    """从已生成数据集(lvl_*/rl.json.gz + rl_gt.json.gz)按场景读出 (start, goal, locations),
-    用于跨 run 去重: 把现有轨迹指纹种进 Dedup。want_scenes 限定只读这些场景(分片加速)。"""
+    """Load (start, goal, locations) by scene from lvl_*/rl.json.gz and rl_gt.json.gz for deduplication across runs. want_scenes restricts loading for sharded workers."""
     out = defaultdict(list)
     if not dataset_dir:
         return out
     efs = glob.glob(os.path.join(dataset_dir, "lvl_*", "rl.json.gz"))
-    if not efs:                                   # 兼容父目录(含 r2r/ rxr/ 子目录)布局
+    if not efs:                                   # Also support a parent directory containing r2r/ and rxr/
         efs = glob.glob(os.path.join(dataset_dir, "*", "lvl_*", "rl.json.gz"))
     for ef in sorted(efs):
         gf = ef.replace("rl.json.gz", "rl_gt.json.gz")
@@ -95,8 +93,7 @@ def load_existing_trajs(dataset_dir, want_scenes=None):
 
 
 def load_real_refpaths(want_scenes=None):
-    """读真实 R2R train + RxR guide 的 (start, goal, reference_path), 按场景分组。
-    reference_path 稀疏(几点), 用法侧用 navmesh 加密后做轨迹指纹去重。want_scenes 限定加速。"""
+    """Load real R2R train and RxR guide endpoints and reference paths by scene. Densify sparse paths on the navmesh before fingerprint deduplication. want_scenes restricts loading."""
     out = defaultdict(list)
     for ds in ["r2r/train/train.json.gz", "rxr/train/train_guide.json.gz"]:
         p = os.path.join(C.DATA, "datasets", ds)
@@ -129,11 +126,7 @@ def _rl_instruction(wp_pos, wp_room, regs, goal_obj, goal_room):
 
 def _rl_scene_waypoint(scene, sim, regs, nodes, edges, node_room, dedup, quota, rng, category,
                        lvl_quota=None, spm=None, walk_fn=None, band_hi_mult=1.30):
-    """与 _rl_scene 并行的多 waypoint 版本: 沿 start->goal 的房间链, 每个途经房间选一个
-    物体/地标作 waypoint, 逐段最短路串联, 最后一个 waypoint=goal。按段各自算最短路,
-    不限制总绕路比。r2r(want=1)无中间房 -> 退化为单段; rxr(want>=2)产生真正多房途经轨迹。
-    walk_fn: 走轨迹的函数(默认 greedy follower); 传 C.walk_pathfollow 用快通道。
-    band_hi_mult: geo 预筛上界系数(收紧减少走完才因步数丢弃的浪费)。"""
+    """Sample multi-waypoint paths through room chains, selecting an object or landmark in each intermediate room and joining segment shortest paths without a global detour-ratio cap. R2R uses a single segment; RxR can traverse multiple rooms. walk_fn defaults to the greedy follower; C.walk_pathfollow enables fast control. band_hi_mult bounds the geodesic prefilter."""
     pf, agent = sim.pathfinder, sim.get_agent(0)
     walk_fn = walk_fn or C.walk_follower
     follower = sim.make_greedy_follower(agent_id=0, goal_radius=GOAL_RADIUS_RL, stop_key="stop",
@@ -159,7 +152,7 @@ def _rl_scene_waypoint(scene, sim, regs, nodes, edges, node_room, dedup, quota, 
         return -1
 
     def room_waypoint(r):
-        """中间房选一个非墙物体转可走站点; 失败回退房心; 再失败返回 None(跳过该房)。"""
+        """Choose a navigable point near a non-wall object in an intermediate room; fall back to the room center, then None."""
         objs = [(cn, oc) for cn, oc in regs[r]["objs"] if cn not in C.WALL_OBJECTS]
         for oi in rng.permutation(len(objs)):
             gp = C.reachable_goal(pf, objs[oi][1])
@@ -171,27 +164,27 @@ def _rl_scene_waypoint(scene, sim, regs, nodes, edges, node_room, dedup, quota, 
         return None
 
     def try_pair(s_node, g_room, goal_obj, gp, waypoints, planned):
-        """沿 waypoints 逐段走 start->...->goal 并过滤; 通过返回 record, 否则 None。"""
+        """Follow and filter each waypoint segment; return a record on success, otherwise None."""
         sp = np.array(nodes[s_node], np.float32)
-        if dedup.is_dup(sp, gp):              # 端点/数据集/goal聚集 先廉价拦
+        if dedup.is_dup(sp, gp):              # Cheap endpoint, dataset, and goal-density checks first
             return None
         yaw = float(rng.uniform(0, 2 * math.pi))
         actions, locations = walk_fn(sim, follower, agent, sp, yaw, waypoints)
         n_steps = len([x for x in actions if x != 0])
         if not (STEP_MIN <= n_steps <= STEP_MAX):
             return None
-        if np.linalg.norm(np.array(locations[-1]) - gp) > 0.4:      # 必须真到达最终 goal
+        if np.linalg.norm(np.array(locations[-1]) - gp) > 0.4:      # Require actual arrival at the final goal
             return None
         locs = np.array(locations, np.float32)
         gdist = C.geo(pf, sp, gp)
-        if gdist < RL_MIN_GEO:                # 太近的丢弃; 多段不再限制总绕路比
+        if gdist < RL_MIN_GEO:                # Reject short paths; do not limit the overall multi-segment detour ratio
             return None
-        if dedup.is_dup(sp, gp, traj=locs):   # 走完后再查轨迹重合
+        if dedup.is_dup(sp, gp, traj=locs):   # Check trajectory overlap after execution
             return None
-        keep = C.rdp(locs, eps=0.6)                                 # 角点(保留转弯结构)
-        ref_path = C.resample_waypoints(locs, keep, step=REF_STEP,  # 按弧长 ~1.8m 重采样
-                                        min_pts=REF_MIN_PTS)        # 禁止退化成 2 点
-        # 指令用规划好的 waypoint(房间索引已知, 避免 room_of 在 AABB 重叠处误判)
+        keep = C.rdp(locs, eps=0.6)                                 # Preserve corner structure
+        ref_path = C.resample_waypoints(locs, keep, step=REF_STEP,  # Resample by arc length at approximately 1.8 m
+                                        min_pts=REF_MIN_PTS)        # Avoid two-point paths
+        # Use planned waypoint room IDs to avoid ambiguous overlapping room AABBs
         instr_pos = [sp.tolist()] + [pt.tolist() for _, pt in planned] + [gp.tolist()]
         instr_room = [room_of(sp)] + [r for r, _ in planned] + [g_room]
         chain = []
@@ -201,7 +194,7 @@ def _rl_scene_waypoint(scene, sim, regs, nodes, edges, node_room, dedup, quota, 
         if (category == "rxr" and len(set(chain)) < 3) or \
            (category == "r2r" and len(set(chain)) < 2):
             return None
-        if len(instr_pos) < 3:                # r2r 不足 3 点时插中点(保持指令丰富度)
+        if len(instr_pos) < 3:                # Insert a midpoint for R2R paths with fewer than three points to enrich instructions
             mid = locs[len(locs) // 2]
             instr_pos.insert(-1, mid.tolist()); instr_room.insert(-1, room_of(mid))
         instr = _rl_instruction(instr_pos, instr_room, regs, goal_obj, regs[g_room]["name"])
@@ -212,9 +205,9 @@ def _rl_scene_waypoint(scene, sim, regs, nodes, edges, node_room, dedup, quota, 
                 "instruction": instr, "geodesic": float(gdist),
                 "n_steps": n_steps, "actions": actions, "locations": locations}
 
-    # 分级重试: 外层选可达 start, 内层试多个 goal (复用好起点)
-    # targeted=True: 按 lvl_quota(每桶剩余) 定向生成 -> 目标桶加权选 -> 映射目标 geodesic 带 ->
-    #                提案前用 geo 廉价预筛(避免走满桶/空走), 落桶已满则拒(已入 dedup 不重复)。
+    # Nested retries: choose a reachable start, then try multiple goals
+    # Target remaining per-bin quotas: sample a weighted bin and map it to a geodesic band;
+    # prefilter by geodesic distance and reject full bins while retaining dedup fingerprints.
     LVL_STEP = {f"lvl_{lo:03d}-{hi:03d}": (lo, hi) for lo, hi in LEVELS}
     targeted = lvl_quota is not None
     total_need = sum(lvl_quota.values()) if targeted else quota
@@ -248,7 +241,7 @@ def _rl_scene_waypoint(scene, sim, regs, nodes, edges, node_room, dedup, quota, 
                 path.append(p)
             return path[::-1]            # [s_room, mid1, ..., g_room]
 
-        # 选目标桶(按缺口加权) -> 目标 geodesic 带 + 期望房间跳数 want
+        # Choose a bin weighted by its deficit, then a geodesic band and desired room-hop count
         if targeted and spm:
             nl = list(needed); wts = np.array([needed[l] for l in nl], float)
             tgt = nl[int(rng.choice(len(nl), p=wts / wts.sum()))]
@@ -257,14 +250,14 @@ def _rl_scene_waypoint(scene, sim, regs, nodes, edges, node_room, dedup, quota, 
             band_lo = max(RL_MIN_GEO, tlo / spm * 0.80)
             band_hi = thi / spm * band_hi_mult
             if category == "r2r":
-                want = max(1, int(round(gc / 6.0)))         # ~6m/房跳: 远桶自然多跳到更远的 room
+                want = max(1, int(round(gc / 6.0)))         # Approximately 6 m per room hop; farther bins naturally traverse more rooms
             else:
                 want = 2 if gc < 11 else (3 if gc < 20 else 4)
         else:
             band_lo, band_hi = RL_MIN_GEO, 1e9
             want = 1 if category == "r2r" else int(rng.choice([2, 2, 3, 3, 4]))
 
-        # r2r = 任意两房间(不限跳数): 起点房 -> 任意可达目标房, 走最短路(单 goal, 仍是 room-to-room)
+        # R2R: shortest path between any reachable pair of rooms, with a single goal and no hop limit
         dmin, dmax = (1, 99) if category == "r2r" else (2, 99)
         groomes = sorted([r for r, d in rdist.items()
                           if r in rooms and r != s_room and regs[r]["objs"] and dmin <= d <= dmax],
@@ -272,10 +265,10 @@ def _rl_scene_waypoint(scene, sim, regs, nodes, edges, node_room, dedup, quota, 
         got = False
         for g_room in groomes:
             if category == "r2r":
-                chain_rooms = room_path(g_room)             # 最短(穿过中间房, 但任务=单起点->单goal)
+                chain_rooms = room_path(g_room)             # Shortest room chain; intermediate rooms do not add goals
             else:
                 chain_rooms = C.random_room_chain(radj, s_room, g_room, rng,
-                                                  extra=1, detour_prob=0.20, max_total=4)  # rxr 房间可重复但克制(链短,快)
+                                                  extra=1, detour_prob=0.20, max_total=4)  # Allow limited repeated rooms for short, efficient RxR chains
             if chain_rooms is None:
                 continue
             mids = []
@@ -288,11 +281,11 @@ def _rl_scene_waypoint(scene, sim, regs, nodes, edges, node_room, dedup, quota, 
                 continue
             for oi in list(rng.permutation(len(objs)))[:4]:
                 cn, oc = objs[oi]
-                gp = C.reachable_goal(pf, oc)         # snap+离墙校验
+                gp = C.reachable_goal(pf, oc)         # Snap and check wall clearance
                 if gp is None:
                     continue
                 gp = np.asarray(gp, np.float32)
-                if not (band_lo <= C.geo(pf, sp, gp) <= band_hi):   # 廉价预筛: 不在目标 geo 带就别走(贵)
+                if not (band_lo <= C.geo(pf, sp, gp) <= band_hi):   # Cheap prefilter: skip expensive execution outside the target geodesic band
                     continue
                 waypoints = [wp for _, wp in mids] + [gp]
                 rec = try_pair(s_node, g_room, cn, gp, waypoints, mids)
@@ -301,7 +294,7 @@ def _rl_scene_waypoint(scene, sim, regs, nodes, edges, node_room, dedup, quota, 
                 if targeted:
                     lvl = level_name(rec["n_steps"])
                     if lvl is None or lvl_quota.get(lvl, 0) <= 0:
-                        continue                      # 落桶已满 -> 丢弃(轨迹已入 dedup, 不会重复产)
+                        continue                      # Reject full bins; the dedup fingerprint prevents regeneration
                     lvl_quota[lvl] -= 1
                 out.append(rec); stale = 0; got = True
                 break
@@ -319,24 +312,24 @@ def cmd_rl_waypoint():
     ap.add_argument("--total", type=int, default=5000)
     ap.add_argument("--category", choices=["r2r", "rxr"], default="r2r",
                     help="r2r=one start room to one goal room; rxr=waypoints along a room chain")
-    ap.add_argument("--scenes", default="", help="逗号分隔; 留空=全部 train 场景")
-    ap.add_argument("--forbidden", default="", help="预算的禁止对文件; 留空则现算 R2R+RxR")
+    ap.add_argument("--scenes", default="", help="Comma-separated scenes; empty means all training scenes")
+    ap.add_argument("--forbidden", default="", help="Precomputed forbidden-pair file; empty computes R2R and RxR pairs")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--min-geo", type=float, default=3.0, help="geodesic 下限(m); 调高右移步数分布补中等桶")
-    ap.add_argument("--stale", type=int, default=800, help="连续无新增放弃阈值; rxr 调低(150)加速")
+    ap.add_argument("--min-geo", type=float, default=3.0, help="Minimum geodesic distance (m); increase to favor longer step counts")
+    ap.add_argument("--stale", type=int, default=800, help="Consecutive unsuccessful attempt limit; lower (e.g. 150) for faster RxR sampling")
     ap.add_argument("--target-dist", default="",
-                    help="每场景目标分布(配额): 'lo:count' 逗号分隔(lo=桶下界 0,50,100..). 空=原始无配额")
+                    help="Per-scene quotas as comma-separated lo:count entries; lo is 0,50,100,...; empty disables quotas")
     ap.add_argument("--step-ratios", default="", help="Optional weights for 0-49,50-99,...,350-400 steps")
     ap.add_argument("--seed-existing", default="",
-                    help="已生成数据集目录; 把其轨迹指纹种进 Dedup 以跨 run 去重(接着生成不重复)")
+                    help="Existing dataset directory; seed its fingerprints for deduplication across runs")
     ap.add_argument("--seed-real", action="store_true",
-                    help="把真实 R2R/RxR 轨迹(ref_path 加密后)种进 Dedup, 新轨迹与真实重合超阈值即拒")
+                    help="Seed densified real R2R/RxR reference paths and reject excessive overlap")
     ap.add_argument("--path-overlap", type=float, default=0.75,
-                    help="轨迹重合判重阈值(格点重叠率); 调高=更宽松产量多, 调低=更严轨迹更分散")
+                    help="Trajectory grid-overlap threshold; higher allows more overlap and lower increases diversity")
     ap.add_argument("--fast-follower", action="store_true",
-                    help="快通道: 用 pathfinder 折线 + 几何控制驱动 sim.step 替代 greedy follower(~13x, sim 自洽)")
+                    help="Fast path: drive sim.step with pathfinder vertices and geometric control instead of the greedy follower")
     ap.add_argument("--band-hi-mult", type=float, default=1.30,
-                    help="配额模式 geo 预筛上界系数; 调低(如1.15)减少走完才因步数超桶被丢的浪费")
+                    help="Upper geodesic prefilter multiplier in quota mode; lower (e.g. 1.15) to reduce overlong rejected trajectories")
     ap.add_argument("--out", default=os.path.join(C.DATA, "datasets", "mp3d_rl"))
     a = ap.parse_args()
     global RL_MIN_GEO, RL_STALE_MAX; RL_MIN_GEO = a.min_geo; RL_STALE_MAX = a.stale
@@ -349,7 +342,7 @@ def cmd_rl_waypoint():
     if a.step_ratios and a.target_dist:
         ap.error("Use either --step-ratios or --target-dist")
     per = max(1, math.ceil(a.total / len(scenes)))
-    target = parse_target_dist(a.target_dist)          # {lvl_name: 本进程每场景配额} 或 None
+    target = parse_target_dist(a.target_dist)          # {lvl_name: per-scene quota for this process}, or None
     if a.step_ratios:
         caps = ratio_caps(a.step_ratios, per)
         target = {level_name(i * 50): n for i, n in enumerate(caps) if n}
@@ -357,13 +350,13 @@ def cmd_rl_waypoint():
     existing = load_existing_trajs(a.seed_existing, set(scenes)) if a.seed_existing else {}
     real_eps = load_real_refpaths(set(scenes)) if a.seed_real else {}
     if a.seed_existing:
-        print(f"[去重①合成] 种入现有轨迹: {sum(len(v) for v in existing.values())} 条 / {len(existing)} 场景", flush=True)
+        print(f"[dedup synthetic] Seeded existing trajectories: {sum(len(v) for v in existing.values())} trajectories / {len(existing)} scenes", flush=True)
     if a.seed_real:
-        print(f"[去重②真实] 种入 R2R/RxR: {sum(len(v) for v in real_eps.values())} 条 / {len(real_eps)} 场景", flush=True)
+        print(f"[dedup real] Seeded R2R/RxR: {sum(len(v) for v in real_eps.values())} trajectories / {len(real_eps)} scenes", flush=True)
     if target:
-        print(f"[{a.category}/waypoint] 配额模式 每场景目标 {target} (总~{sum(target.values())*len(scenes)})", flush=True)
+        print(f"[{a.category}/waypoint] Per-scene quota target {target} (total ~{sum(target.values())*len(scenes)})", flush=True)
     else:
-        print(f"[{a.category}/waypoint] 目标 {a.total} 条, {len(scenes)} 场景, 每场景 ~{per}", flush=True)
+        print(f"[{a.category}/waypoint] Target {a.total} trajectories, {len(scenes)} scenes, per scene ~{per}", flush=True)
 
     eps_lvl, gt_lvl = defaultdict(list), defaultdict(dict)
     stats = {"geodesic": [], "n_steps": [], "scene": [], "rooms_per_traj": []}
@@ -378,17 +371,17 @@ def cmd_rl_waypoint():
             nodes, edges = C.load_or_build_graph(sim, scene, a.seed + si)
             regs = C.load_regions(sim, with_objects=True)
             node_room = C.assign_room(nodes, regs)
-            # 不做端点去重(端点不管): 只靠④轨迹重合判重 -> 允许同起终点多路径, 但轨迹不能重
+            # Disable endpoint checks; allow distinct paths sharing endpoints while checking trajectory overlap
             dedup = C.Dedup([], endpoint_dedup=False, path_overlap=a.path_overlap)
-            for s, g, locs in existing.get(scene, []):    # 去重①: 之前生成的合成轨迹(已密集)
+            for s, g, locs in existing.get(scene, []):    # Seed previously generated dense synthetic trajectories
                 if locs:
                     dedup.add(s, g, traj=np.asarray(locs, np.float32))
-            for s, g, rp in real_eps.get(scene, []):      # 去重②: 真实 R2R/RxR(稀疏 ref_path -> navmesh 加密)
+            for s, g, rp in real_eps.get(scene, []):      # Seed real R2R/RxR paths after navmesh densification
                 dp = C.densify(sim.pathfinder, rp, step=0.25)
                 if len(dp) >= 2:
                     dedup.add(s, g, traj=dp)
             quota = min(per, a.total - len(stats["scene"]))
-            lvl_quota = dict(target) if target else None  # 每场景独立配额(分片进程间不共享, 各填各的)
+            lvl_quota = dict(target) if target else None  # Independent per-scene quotas; no state shared between shard processes
             res = _rl_scene_waypoint(scene, sim, regs, nodes, edges, node_room, dedup, quota, rng,
                                      a.category, lvl_quota=lvl_quota, spm=spm,
                                      walk_fn=walk_fn, band_hi_mult=a.band_hi_mult)
@@ -411,7 +404,7 @@ def cmd_rl_waypoint():
             stats["geodesic"].append(r["geodesic"]); stats["n_steps"].append(r["n_steps"])
             stats["scene"].append(scene); stats["rooms_per_traj"].append(len(r["rooms"]))
             tid += 1
-        print(f"[{si+1}/{len(scenes)}] {scene}: +{len(res)} 累计 {len(stats['scene'])} "
+        print(f"[{si+1}/{len(scenes)}] {scene}: +{len(res)} cumulative {len(stats['scene'])} "
               f"{time.time()-t0:.0f}s", flush=True)
 
     for lvl in sorted(eps_lvl):
@@ -420,27 +413,27 @@ def cmd_rl_waypoint():
         json.dump({"episodes": eps_lvl[lvl], "instruction_vocab": {"word_list": voc}},
                   gzip.open(os.path.join(d, "rl.json.gz"), "wt"))
         json.dump(gt_lvl[lvl], gzip.open(os.path.join(d, "rl_gt.json.gz"), "wt"))
-        print(f"  {lvl}: {len(eps_lvl[lvl])} 条", flush=True)
+        print(f"  {lvl}: {len(eps_lvl[lvl])} trajectories", flush=True)
     os.makedirs(a.out, exist_ok=True)
     json.dump(stats, open(os.path.join(a.out, "_stats.json"), "w"))
-    rng_s = f"[{min(stats['n_steps'])},{max(stats['n_steps'])}]" if stats["n_steps"] else "[空]"
-    print(f"完成 {len(stats['scene'])} 条, 场景 {len(set(stats['scene']))}, "
-          f"步数{rng_s} {time.time()-t0:.0f}s", flush=True)
+    rng_s = f"[{min(stats['n_steps'])},{max(stats['n_steps'])}]" if stats["n_steps"] else "[empty]"
+    print(f"Completed {len(stats['scene'])} trajectories, scenes {len(set(stats['scene']))}, "
+          f"steps{rng_s} {time.time()-t0:.0f}s", flush=True)
 # =========================================================================
-# merge: 合并分片 -> 最终分级数据 (全局重编号)
+# Merge shards into final level datasets with global ID reassignment
 # =========================================================================
 def cmd_merge():
     ap = argparse.ArgumentParser(prog="merge")
     ap.add_argument("--shards", default=os.path.join(C.DATA, "datasets/r2r_rl/_shards"))
     ap.add_argument("--extra", default="",
-                    help="额外已合并数据集目录(逗号分隔, 各含 lvl_*/); 把现有数据一起折进来做加法")
+                    help="Additional merged dataset directories, comma-separated, each containing lvl_*/; include their existing data")
     ap.add_argument("--out", default=os.path.join(C.DATA, "datasets/r2r_rl"))
     a = ap.parse_args()
     eps_lvl, gt_lvl = defaultdict(list), defaultdict(dict)
     stats = {"geodesic": [], "n_steps": [], "scene": [], "rooms_per_traj": []}
     tid = 0
-    sources = sorted(glob.glob(os.path.join(a.shards, "*")))      # 每场景一分片
-    sources += [d for d in a.extra.split(",") if d.strip()]       # + 现有数据集
+    sources = sorted(glob.glob(os.path.join(a.shards, "*")))      # One shard per scene
+    sources += [d for d in a.extra.split(",") if d.strip()]       # Include existing datasets
     for sh in sources:
         for ef in sorted(glob.glob(os.path.join(sh, "lvl_*", "rl.json.gz"))):
             lvl = os.path.basename(os.path.dirname(ef))
@@ -450,7 +443,7 @@ def cmd_merge():
                 old = str(ep["trajectory_id"])
                 ep["episode_id"] = ep["trajectory_id"] = tid
                 eps_lvl[lvl].append(ep); gt_lvl[lvl][str(tid)] = gt[old]; tid += 1
-                info = ep.get("info", {})                          # stats 从 episode 现算(旧 _stats 不可信)
+                info = ep.get("info", {})                          # Recompute stats from episodes; old _stats may be unreliable
                 stats["geodesic"].append(info.get("geodesic_distance"))
                 stats["n_steps"].append(info.get("num_steps"))
                 stats["scene"].append(ep["scene_id"].split("/")[1])
@@ -470,9 +463,9 @@ def cmd_merge():
         json.dump({"episodes": eps_lvl[lvl], "instruction_vocab": {"word_list": vocab}},
                   gzip.open(os.path.join(dd, "rl.json.gz"), "wt"))
         json.dump(gt_lvl[lvl], gzip.open(os.path.join(dd, "rl_gt.json.gz"), "wt"))
-        print(f"{lvl}: {len(eps_lvl[lvl])} 条")
+        print(f"{lvl}: {len(eps_lvl[lvl])} trajectories")
     json.dump(stats, open(os.path.join(a.out, "_stats.json"), "w"))
-    print(f"合计 {tid} 条, 场景 {len(set(stats['scene']))}")
+    print(f"Total {tid} trajectories, scenes {len(set(stats['scene']))}")
 
 _DATA = os.environ.get("VLN_DATA", "/root/code/data")
 HM3D_ROOT = os.path.join(_DATA, "scene_datasets", "hm3d")
@@ -500,7 +493,7 @@ def list_scenes(dataset, split):
 def open_sim(dataset, glb, navmesh, gpu):
     cfg = C.make_cfg(glb, with_rgb=True)
     try:
-        cfg.sim_cfg.gpu_device_id = gpu          # 分摊多卡
+        cfg.sim_cfg.gpu_device_id = gpu          # Distribute across GPUs
     except Exception:
         pass
     sim = habitat_sim.Simulator(cfg)
@@ -578,7 +571,7 @@ def topdown(pts, start, goal, W=480, H=380, pad=36):
     return img
 
 
-# ---------------- 去重 / nDTW / 重合 ----------------
+# ---------------- Deduplication / nDTW / overlap ----------------
 def _dense_path(rp, step=0.25):
     out = []
     for a, b in zip(rp[:-1], rp[1:]):
@@ -615,7 +608,7 @@ def _dtwc(P, Q):
     return acc[n, m]
 
 
-def _fwd_ndtw(P, Q):   # 方向敏感(正向), 对称取较大
+def _fwd_ndtw(P, Q):   # Direction-sensitive forward comparison; take the larger symmetric score
     return max(math.exp(-_dtwc(P, Q) / (len(Q) * 3.0)), math.exp(-_dtwc(Q, P) / (len(P) * 3.0)))
 
 
@@ -642,7 +635,7 @@ def _max_cover(pa, sv_list, thr=0.5, reject_at=1.1):
     return best
 
 
-# ---------------- 采样 worker (单分片) ----------------
+# ---------------- Sampling worker (single shard) ----------------
 def _write_checkpoint(path, state):
     tmp = path + f".{os.getpid()}.tmp"
     with open(tmp, "w", encoding="utf-8") as f:
@@ -713,7 +706,7 @@ def _worker_sample(cfg):
     existing = checkpoint["count"]
     eid = sid * 1000000 + existing
     fout = open(jsonl, "ab")
-    print(f"[shard{sid}/{sn}] {len(scenes)}场景 gpu{gpu} bincap={bincap} ndtw={cfg.ndtw_dedup}/{cfg.ndtw_hi} ref={use_ref}", flush=True)
+    print(f"[shard{sid}/{sn}] {len(scenes)} scenes gpu{gpu} bincap={bincap} ndtw={cfg.ndtw_dedup}/{cfg.ndtw_hi} ref={use_ref}", flush=True)
     for sdir, glb, nav, sem in scenes:
         sv_dense = [_dense_path(p) for p in svp.get(sdir, [])] if cfg.sv_overlap_max > 0 else []
         rng = np.random.default_rng(cfg.seed + int.from_bytes(hashlib.sha256(sdir.encode("utf-8")).digest()[:4], "big") % 100000)
@@ -755,11 +748,11 @@ def _worker_sample(cfg):
         done.add(sdir)
         checkpoint.update(offset=fout.tell(), count=eid - sid * 1000000, done=sorted(done))
         _write_checkpoint(checkpoint_path, checkpoint)
-        print(f"  [{sdir}] {got}/{att}" + (f" 桶{bincnt}" if bincap else ""), flush=True)
+        print(f"  [{sdir}] {got}/{att}" + (f" bins{bincnt}" if bincap else ""), flush=True)
     fout.close(); print(f"[shard{sid}] ___SHARD_DONE___", flush=True)
 
 
-# ---------------- 采样 launcher (多卡) ----------------
+# ---------------- Sampling launcher (multiple GPUs) ----------------
 def _ngpu():
     try:
         return max(1, len(subprocess.check_output(["nvidia-smi", "-L"]).decode().strip().splitlines()))
@@ -792,7 +785,7 @@ def launch_sample(cfg):
     codes = [p.wait() for p in procs]
     if any(codes):
         raise SystemExit(f"sampling workers failed: {codes}")
-    # 合并分片 -> gen.json.gz
+    # Merge shards into gen.json.gz
     eps, gts, seen = [], {}, set()
     for f in sorted(glob.glob(f"{cfg.out}/_traj_shard*of{cfg.workers}.jsonl")):
         for l in open(f):
@@ -804,10 +797,10 @@ def launch_sample(cfg):
             seen.add(e["episode_id"]); eps.append(e); gts[str(e["episode_id"])] = r["gt"]
     json.dump({"episodes": eps}, gzip.open(f"{cfg.out}/gen.json.gz", "wt"))
     json.dump(gts, gzip.open(f"{cfg.out}/gen_gt.json.gz", "wt"))
-    print(f"[sample] 合并 -> {cfg.out}/gen.json.gz  {len(eps)} 条, 用时 {time.time()-t0:.0f}s\n___SAMPLE_DONE___", flush=True)
+    print(f"[sample] Merged -> {cfg.out}/gen.json.gz  {len(eps)} trajectories, elapsed {time.time()-t0:.0f}s\n___SAMPLE_DONE___", flush=True)
 
 
-# ---------------- dedup 子命令 ----------------
+# ---------------- dedup subcommand ----------------
 def cmd_dedup(a):
     r = json.load(gzip.open(a.rl, "rt"))["episodes"]
     gtf = a.rl.replace("rl.json.gz", "rl_gt.json.gz").replace("gen.json.gz", "gen_gt.json.gz")
@@ -825,10 +818,10 @@ def cmd_dedup(a):
             else:
                 removed += 1
     json.dump(keep_ids, open(a.out, "w"))
-    print(f"dedup(thr={a.thr}): {len(r)} -> 保留 {len(keep_ids)} (删 {removed}) -> {a.out}")
+    print(f"dedup(thr={a.thr}): {len(r)} -> kept {len(keep_ids)} (removed {removed}) -> {a.out}")
 
 
-# ---------------- assemble 子命令 ----------------
+# ---------------- assemble subcommand ----------------
 def _step(gt, eid): return sum(1 for x in gt[str(eid)]["actions"] if x != 0)
 
 
@@ -850,7 +843,7 @@ def cmd_assemble(a):
     if a.trim_ratio <= 0:
         kept = items
     else:
-        # 只裁指定桶到目标比例, 优先丢新的
+        # Trim only specified bins to target ratios, discarding new entries first
         tb = a.trim_bin // 50
         inbin = [it for it in items if min(_step_it(it) // 50, 4) == tb]
         other = [it for it in items if min(_step_it(it) // 50, 4) != tb]
@@ -871,8 +864,8 @@ def cmd_assemble(a):
     json.dump({"episodes": feps}, gzip.open(f"{a.out}/rl.json.gz", "wt")); json.dump(fgt, gzip.open(f"{a.out}/rl_gt.json.gz", "wt"))
     json.dump({"episodes": teps}, gzip.open(f"{tol}/gen.json.gz", "wt")); json.dump(tgt, gzip.open(f"{tol}/gen_gt.json.gz", "wt"))
     b = Counter(min(_step(fgt, e["episode_id"]) // 50 * 50, 200) for e in feps); n = len(feps)
-    print(f"assemble: {n} 条 (待标 {len(teps)}) -> {a.out}; 待标集 {tol}")
-    print("桶:", {f"{k}-{k+50}": f"{100*b[k]/n:.0f}%" for k in (0, 50, 100, 150)})
+    print(f"assemble: {n} trajectories (pending labels {len(teps)}) -> {a.out}; labeling set {tol}")
+    print("Bins:", {f"{k}-{k+50}": f"{100*b[k]/n:.0f}%" for k in (0, 50, 100, 150)})
 
 
 def _step_it(it): return sum(1 for x in it[1]["actions"] if x != 0)
@@ -882,7 +875,7 @@ def _hm3d_main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("sample")
-    s.add_argument("--workers", type=int, default=1, help=">1=多卡launcher; 内部worker由SHARD_N触发")
+    s.add_argument("--workers", type=int, default=1, help=">1 launches workers across GPUs; SHARD_N triggers an internal worker")
     for name, kw in [("--dataset", dict(default="hm3d", choices=["hm3d", "mp3d"])), ("--split", dict(default="train")),
                      ("--scenes", dict(type=int, default=0)), ("--per-scene", dict(type=int, default=30)),
                      ("--min-m", dict(type=float, default=5.0)), ("--max-m", dict(type=float, default=13.0)),
@@ -915,7 +908,7 @@ def _hm3d_main():
 
 def main():
     if len(sys.argv) < 2:
-        raise SystemExit("用法: sample.py {mp3d|merge|hm3d|dedup|pack} ...")
+        raise SystemExit("Usage: sample.py {mp3d|merge|hm3d|dedup|pack} ...")
     cmd = sys.argv[1]
     if cmd == "mp3d":
         sys.argv = ["sample mp3d"] + sys.argv[2:]
@@ -930,7 +923,7 @@ def main():
     elif cmd == "pack":
         sys.argv[1] = "assemble"
     elif cmd not in ("sample", "dedup", "assemble"):
-        raise SystemExit("用法: sample.py {mp3d|merge|hm3d|dedup|pack} ...")
+        raise SystemExit("Usage: sample.py {mp3d|merge|hm3d|dedup|pack} ...")
     _hm3d_main()
 
 

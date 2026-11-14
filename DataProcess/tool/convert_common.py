@@ -156,7 +156,7 @@ def uniform_sample_with_ends(data, n):
     return [data[round(i * (len(data) - 1) / (n - 1))] for i in range(n)]
 
 
-def prep_actions_and_images(episode, image_root, drop_stop=False):
+def prep_actions_and_images(episode, image_root):
     try:
         executed = episode.get('executed_actions')
         raw = executed if executed is not None else episode.get('actions', [])
@@ -189,9 +189,6 @@ def prep_actions_and_images(episode, image_root, drop_stop=False):
         images = images[:len(actions) + 1]
         if has_stop and len(images) == len(actions):
             images.append(images[-1])  # only STOP can reuse the terminal frame
-        if drop_stop and has_stop:
-            actions = actions[:-1]
-            images = images[:len(actions) + 1]
         if not actions:
             return None
         return actions, images
@@ -200,7 +197,7 @@ def prep_actions_and_images(episode, image_root, drop_stop=False):
         return None
 
 
-def get_instructions(episode, only_first=False):
+def get_instructions(episode):
     instructions = episode.get('instructions') or episode.get('instruction') or []
     if isinstance(instructions, dict):
         instructions = instructions.get('instruction_text', [])
@@ -212,4 +209,4 @@ def get_instructions(episode, only_first=False):
     instructions = [s for s in instructions if isinstance(s, str) and s.strip()]
     if not instructions:
         skip_episode(episode, 'no nonempty instruction text')
-    return instructions[:1] if only_first else instructions
+    return instructions

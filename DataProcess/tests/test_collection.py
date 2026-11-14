@@ -182,8 +182,11 @@ class CollectionTests(unittest.TestCase):
             self.assertEqual(annotation['terminal_action'], 0)
             self.assertEqual(annotation['model_call_groups'][0]['planned_actions'], [1,1,1])
             self.assertEqual(annotation['model_call_groups'][0]['executed_actions'], [1,1,0])
-            output = []; convert_dagger.convert_episode_merged(annotation, folder, output)
-            self.assertEqual(output[0]['messages'][1]['value'], 'forward 50 cm, stop')
+            output = []; convert_dagger.convert_episode_atomic(annotation, folder, output)
+            self.assertTrue(output)
+            labels = ', '.join(sample['messages'][1]['value'] for sample in output)
+            self.assertIn('stop', labels)
+            self.assertNotIn('forward 300 cm', labels)
             self.assertTrue(all(Path(image).exists() for sample in output for image in sample['images']))
 
     def test_collection_history_window_is_200(self):
